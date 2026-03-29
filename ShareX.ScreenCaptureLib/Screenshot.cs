@@ -65,9 +65,12 @@ namespace ShareX.ScreenCaptureLib
                 rect = Rectangle.Intersect(bounds, rect);
             }
 
+            LastHDRCaptureResult?.Dispose();
             LastHDRCaptureResult = null;
             LastHDRCaptureError = null;
             LastHDRCaptureStatus = HDRCaptureStatus.Disabled;
+
+            Bitmap preview = CaptureRectangleNative(rect, CaptureCursor);
 
             if (CaptureHDR)
             {
@@ -83,7 +86,7 @@ namespace ShareX.ScreenCaptureLib
                         if (LastHDRCaptureResult != null)
                         {
                             LastHDRCaptureStatus = HDRCaptureStatus.Succeeded;
-                            return LastHDRCaptureResult.ToSDRBitmap(HDRToneMapAlgorithm);
+                            return preview;
                         }
 
                         LastHDRCaptureStatus = HDRCaptureStatus.Failed;
@@ -104,7 +107,7 @@ namespace ShareX.ScreenCaptureLib
                 }
             }
 
-            return CaptureRectangleNative(rect, CaptureCursor);
+            return preview;
         }
 
         public Bitmap CaptureFullscreen()

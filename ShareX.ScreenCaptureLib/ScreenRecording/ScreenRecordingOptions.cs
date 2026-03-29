@@ -163,12 +163,27 @@ namespace ShareX.ScreenCaptureLib
                         args.Append($"offset_x={captureArea.X}:"); // Horizontal offset of the captured video.
                         args.Append($"offset_y={captureArea.Y}:"); // Vertical offset of the captured video.
                         args.Append($"video_size={captureArea.Width}x{captureArea.Height}:"); // Specify the size of the captured video.
-                        args.Append("output_fmt=bgra"); // Desired filter output format.
 
-                        if (FFmpeg.VideoCodec != FFmpegVideoCodec.h264_nvenc && FFmpeg.VideoCodec != FFmpegVideoCodec.hevc_nvenc)
+                        // HDR support: use 10-bit format for HDR capture
+                        if (FFmpeg.HDR)
+                        {
+                            args.Append("output_fmt=p010le:"); // 10-bit YUV 4:2:0 for HDR
+                        }
+                        else
+                        {
+                            args.Append("output_fmt=bgra"); // Desired filter output format.
+                        }
+
+                        if (!FFmpeg.HDR && FFmpeg.VideoCodec != FFmpegVideoCodec.h264_nvenc && FFmpeg.VideoCodec != FFmpegVideoCodec.hevc_nvenc)
                         {
                             args.Append(",hwdownload");
                             args.Append(",format=bgra");
+                        }
+                        else if (FFmpeg.HDR)
+                        {
+                            // For HDR, we need hwdownload with p010le format
+                            args.Append(",hwdownload");
+                            args.Append(",format=p010le");
                         }
 
                         args.Append(" ");
@@ -208,7 +223,14 @@ namespace ShareX.ScreenCaptureLib
 
             if (FFmpeg.IsVideoSourceSelected)
             {
-                if (IsLossless || FFmpeg.VideoCodec != FFmpegVideoCodec.apng)
+                bool useHDREncoding = FFmpeg.HDR;
+
+                if (useHDREncoding)
+                {
+                    AppendHDREncodingArgs(args);
+                    args.Append($"-r {framerate} "); // output FPS
+                }
+                else if (IsLossless || FFmpeg.VideoCodec != FFmpegVideoCodec.apng)
                 {
                     string videoCodec;
 
@@ -229,13 +251,13 @@ namespace ShareX.ScreenCaptureLib
                     args.Append($"-r {framerate} "); // output FPS
                 }
 
-                if (IsLossless)
+                if (!useHDREncoding && IsLossless)
                 {
                     args.Append($"-preset {FFmpegPreset.ultrafast} ");
                     args.Append($"-tune {FFmpegTune.zerolatency} ");
                     args.Append("-qp 0 ");
                 }
-                else
+                else if (!useHDREncoding)
                 {
                     switch (FFmpeg.VideoCodec)
                     {
@@ -303,6 +325,7 @@ namespace ShareX.ScreenCaptureLib
                             break;
                     }
                 }
+
             }
 
             if (FFmpeg.IsAudioSourceSelected)
@@ -336,6 +359,109 @@ namespace ShareX.ScreenCaptureLib
             args.Append($"\"{output}\"");
 
             return args.ToString();
+        }
+
+        private void AppendHDREncodingArgs(StringBuilder args)
+        {
+            // Get color space and transfer function values
+            string colorPrimaries = FFmpeg.HDRColorSpace == HDRColorSpace.BT2020 ? "bt2020" : "smpte432";
+            string colorTrc = FFmpeg.HDRTransferFunction == HDRTransferFunction.PQ ? "smpte2084" : "arib-std-b67";
+            string colorspace = "bt2020nc";
+
+            // HDR metadata (Mastering Display and Content Light Level)
+            // Using typical values for a 1000-nit display
+            string masteringDisplay = "G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,1)";
+            string contentLightLevel = "maxCLL=1000,maxFALL=400";
+
+            switch (FFmpeg.HDRVideoCodec)
+            {
+                case HDRVideoCodec.HDR10_HEVC:
+                    // libx265 HDR10 encoding
+                    args.Append("-c:v libx265 ");
+                    args.Append("-preset medium ");
+                    args.Append($"-b:v {FFmpeg.HDR_Bitrate}k ");
+                    args.Append("-pix_fmt yuv420p10le "); // 10-bit 4:2:0
+                    args.Append($"-color_primaries {colorPrimaries} ");
+                    args.Append($"-color_trc {colorTrc} ");
+                    args.Append($"-colorspace {colorspace} ");
+                    args.Append("-hdr10 1 "); // Enable HDR10 metadata
+                    args.Append($"-master_display \"{masteringDisplay}\" ");
+                    args.Append($"-max_cll \"{contentLightLevel}\" ");
+                    args.Append("-tag:v hvc1 ");
+                    args.Append("-movflags +faststart ");
+                    break;
+
+                case HDRVideoCodec.HDR10_HEVC_NVENC:
+                    // NVENC HEVC HDR10 encoding
+                    args.Append("-c:v hevc_nvenc ");
+                    args.Append("-preset p4 ");
+                    args.Append("-tune hq ");
+                    args.Append("-profile:v main10 "); // 10-bit profile
+                    args.Append($"-b:v {FFmpeg.HDR_Bitrate}k ");
+                    args.Append("-pix_fmt p010le "); // 10-bit NVENC format
+                    args.Append($"-color_primaries {colorPrimaries} ");
+                    args.Append($"-color_trc {colorTrc} ");
+                    args.Append($"-colorspace {colorspace} ");
+                    args.Append($"-master_display \"{masteringDisplay}\" ");
+                    args.Append($"-max_cll \"{contentLightLevel}\" ");
+                    args.Append("-tag:v hvc1 ");
+                    args.Append("-movflags +faststart ");
+                    break;
+
+                case HDRVideoCodec.HDR10_HEVC_AMF:
+                    // AMF HEVC HDR10 encoding
+                    args.Append("-c:v hevc_amf ");
+                    args.Append("-usage transcoding ");
+                    args.Append("-profile main10 ");
+                    args.Append("-quality balanced ");
+                    args.Append($"-b:v {FFmpeg.HDR_Bitrate}k ");
+                    args.Append("-pix_fmt p010le ");
+                    args.Append($"-color_primaries {colorPrimaries} ");
+                    args.Append($"-color_trc {colorTrc} ");
+                    args.Append($"-colorspace {colorspace} ");
+                    args.Append("-tag:v hvc1 ");
+                    break;
+
+                case HDRVideoCodec.HDR10_HEVC_QSV:
+                    // QSV HEVC HDR10 encoding
+                    args.Append("-c:v hevc_qsv ");
+                    args.Append("-preset medium ");
+                    args.Append($"-b:v {FFmpeg.HDR_Bitrate}k ");
+                    args.Append("-pix_fmt p010le ");
+                    args.Append($"-color_primaries {colorPrimaries} ");
+                    args.Append($"-color_trc {colorTrc} ");
+                    args.Append($"-colorspace {colorspace} ");
+                    args.Append("-tag:v hvc1 ");
+                    break;
+
+                case HDRVideoCodec.HLG_HEVC:
+                    // HLG (Hybrid Log-Gamma) encoding
+                    args.Append("-c:v libx265 ");
+                    args.Append("-preset medium ");
+                    args.Append($"-b:v {FFmpeg.HDR_Bitrate}k ");
+                    args.Append("-pix_fmt yuv420p10le ");
+                    args.Append($"-color_primaries {colorPrimaries} ");
+                    args.Append("-color_trc arib-std-b67 "); // HLG
+                    args.Append($"-colorspace {colorspace} ");
+                    args.Append("-tag:v hvc1 ");
+                    args.Append("-movflags +faststart ");
+                    break;
+
+                case HDRVideoCodec.HLG_HEVC_NVENC:
+                    // NVENC HEVC HLG encoding
+                    args.Append("-c:v hevc_nvenc ");
+                    args.Append("-preset p4 ");
+                    args.Append("-tune hq ");
+                    args.Append("-profile:v main10 ");
+                    args.Append($"-b:v {FFmpeg.HDR_Bitrate}k ");
+                    args.Append("-pix_fmt p010le ");
+                    args.Append($"-color_primaries {colorPrimaries} ");
+                    args.Append("-color_trc arib-std-b67 "); // HLG
+                    args.Append($"-colorspace {colorspace} ");
+                    args.Append("-tag:v hvc1 ");
+                    args.Append("-movflags +faststart ");
+                    break;
+            }
         }
 
         private void AppendInputDevice(StringBuilder args, string inputDevice, bool audioSource)

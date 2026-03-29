@@ -30,6 +30,7 @@ using ShareX.ScreenCaptureLib;
 using System;
 using System.Drawing;
 using System.IO;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -88,9 +89,12 @@ namespace ShareX
                 taskSettings.CaptureSettings.FFmpegOptions.VideoCodec = FFmpegVideoCodec.gif;
             }
 
-            if (taskSettings.CaptureSettings.FFmpegOptions.IsAnimatedImage)
+            bool useHDRGIFCapture = outputType == ScreenRecordOutput.GIF && taskSettings.CaptureSettings.ScreenRecordHDREnabled;
+            bool useTwoPassEncoding = taskSettings.CaptureSettings.ScreenRecordTwoPassEncoding;
+
+            if (taskSettings.CaptureSettings.FFmpegOptions.IsAnimatedImage && !useHDRGIFCapture)
             {
-                taskSettings.CaptureSettings.ScreenRecordTwoPassEncoding = true;
+                useTwoPassEncoding = true;
             }
 
             int fps;
@@ -184,6 +188,9 @@ namespace ShareX
             string concatPath = "";
             string tempPath = "";
             bool abortRequested = false;
+            int gifSegmentIndex = 0;
+            List<ScreenRecorder> gifSegments = useHDRGIFCapture ? new List<ScreenRecorder>() : null;
+            List<string> gifSegmentPaths = useHDRGIFCapture ? new List<string>() : null;
 
             float duration = taskSettings.CaptureSettings.ScreenRecordFixedDuration ? taskSettings.CaptureSettings.ScreenRecordDuration : 0;
 
@@ -202,7 +209,11 @@ namespace ShareX
                 try
                 {
                     string extension;
-                    if (taskSettings.CaptureSettings.ScreenRecordTwoPassEncoding)
+                    if (useHDRGIFCapture)
+                    {
+                        extension = "gif";
+                    }
+                    else if (useTwoPassEncoding)
                     {
                         extension = "mp4";
                     }
@@ -220,10 +231,13 @@ namespace ShareX
                     }
                     else
                     {
-                        concatPath = FileHelpers.AppendTextToFileName(path, "-concat");
-                        FileHelpers.DeleteFile(concatPath);
-                        tempPath = FileHelpers.AppendTextToFileName(path, "-temp");
-                        FileHelpers.DeleteFile(tempPath);
+                        if (!useHDRGIFCapture)
+                        {
+                            concatPath = FileHelpers.AppendTextToFileName(path, "-concat");
+                            FileHelpers.DeleteFile(concatPath);
+                            tempPath = FileHelpers.AppendTextToFileName(path, "-temp");
+                            FileHelpers.DeleteFile(tempPath);
+                        }
                     }
 
                     while (!abortRequested && (recordForm.Status == ScreenRecordingStatus.Waiting || recordForm.Status == ScreenRecordingStatus.Paused))
@@ -253,7 +267,7 @@ namespace ShareX
 
                         if (recordForm.Status == ScreenRecordingStatus.Waiting || recordForm.Status == ScreenRecordingStatus.Paused)
                         {
-                            if (recordForm.Status == ScreenRecordingStatus.Paused && File.Exists(path))
+                            if (!useHDRGIFCapture && recordForm.Status == ScreenRecordingStatus.Paused && File.Exists(path))
                             {
                                 FileHelpers.RenameFile(path, concatPath);
                             }
@@ -262,23 +276,53 @@ namespace ShareX
 
                             captureRectangle = recordForm.RecordingRegion;
 
+                            // Sync HDR settings from TaskSettingsCapture to FFmpegOptions
+                            taskSettings.CaptureSettings.FFmpegOptions.HDR = taskSettings.CaptureSettings.ScreenRecordHDREnabled;
+                            if (taskSettings.CaptureSettings.ScreenRecordHDREnabled)
+                            {
+                                taskSettings.CaptureSettings.FFmpegOptions.HDRVideoCodec = taskSettings.CaptureSettings.ScreenRecordHDRCodec;
+                                taskSettings.CaptureSettings.FFmpegOptions.HDRTransferFunction = taskSettings.CaptureSettings.ScreenRecordHDRTransferFunction;
+                                taskSettings.CaptureSettings.FFmpegOptions.HDRColorSpace = taskSettings.CaptureSettings.ScreenRecordHDRColorSpace;
+                                taskSettings.CaptureSettings.FFmpegOptions.HDR_Bitrate = taskSettings.CaptureSettings.ScreenRecordHDRBitrate;
+                            }
+
                             ScreenRecordingOptions options = new ScreenRecordingOptions()
                             {
                                 IsRecording = true,
-                                IsLossless = taskSettings.CaptureSettings.ScreenRecordTwoPassEncoding,
+                                IsLossless = useTwoPassEncoding,
                                 FFmpeg = taskSettings.CaptureSettings.FFmpegOptions,
                                 FPS = fps,
                                 Duration = duration,
-                                OutputPath = path,
+                                OutputPath = useHDRGIFCapture ? FileHelpers.AppendTextToFileName(path, $"-segment-{gifSegmentIndex++}") : path,
                                 CaptureArea = captureRectangle,
                                 DrawCursor = taskSettings.CaptureSettings.ScreenRecordShowCursor
                             };
 
+                            if (useHDRGIFCapture)
+                            {
+                                FileHelpers.DeleteFile(options.OutputPath);
+                                gifSegmentPaths.Add(options.OutputPath);
+                            }
+
                             Screenshot screenshot = TaskHelpers.GetScreenshot(taskSettings);
                             screenshot.CaptureCursor = taskSettings.CaptureSettings.ScreenRecordShowCursor;
 
-                            screenRecorder?.Dispose();
-                            screenRecorder = new ScreenRecorder(ScreenRecordOutput.FFmpeg, options, screenshot, captureRectangle);
+                            if (useHDRGIFCapture)
+                            {
+                                screenshot.CaptureHDR = true;
+                                screenshot.HDRToneMapAlgorithm = taskSettings.CaptureSettings.ScreenRecordHDRToneMap;
+                            }
+
+                            if (useHDRGIFCapture && screenRecorder != null)
+                            {
+                                gifSegments.Add(screenRecorder);
+                            }
+                            else
+                            {
+                                screenRecorder?.Dispose();
+                            }
+
+                            screenRecorder = new ScreenRecorder(useHDRGIFCapture ? ScreenRecordOutput.GIF : ScreenRecordOutput.FFmpeg, options, screenshot, captureRectangle);
                             screenRecorder.RecordingStarted += ScreenRecorder_RecordingStarted;
                             screenRecorder.EncodingProgressChanged += ScreenRecorder_EncodingProgressChanged;
                             screenRecorder.StartRecording();
@@ -292,7 +336,7 @@ namespace ShareX
 
                         TaskHelpers.PlayNotificationSoundAsync(NotificationSound.ActionCompleted, taskSettings);
 
-                        if (File.Exists(concatPath))
+                        if (!useHDRGIFCapture && File.Exists(concatPath))
                         {
                             using (FFmpegCLIManager ffmpeg = new FFmpegCLIManager(taskSettings.CaptureSettings.FFmpegOptions.FFmpegPath))
                             {
@@ -308,7 +352,18 @@ namespace ShareX
                     DebugHelper.WriteException(e);
                 }
 
-                if (taskSettings.CaptureSettings.ScreenRecordTwoPassEncoding && !abortRequested && screenRecorder != null && File.Exists(path))
+                if (useHDRGIFCapture && !abortRequested && screenRecorder != null)
+                {
+                    gifSegments.Add(screenRecorder);
+                    screenRecorder = null;
+
+                    if (gifSegments.Count > 0)
+                    {
+                        recordForm.ChangeState(ScreenRecordState.Encoding);
+                        path = ProcessGIFSegments(path, gifSegments, taskSettings.ImageSettings.ImageGIFQuality, 1000 / fps);
+                    }
+                }
+                else if (useTwoPassEncoding && !abortRequested && screenRecorder != null && File.Exists(path))
                 {
                     recordForm.ChangeState(ScreenRecordState.Encoding);
 
@@ -331,6 +386,14 @@ namespace ShareX
                     screenRecorder = null;
                 }
 
+                if (gifSegments != null)
+                {
+                    foreach (ScreenRecorder gifSegment in gifSegments)
+                    {
+                        gifSegment.Dispose();
+                    }
+                }
+
                 if (abortRequested)
                 {
                     FileHelpers.DeleteFile(path);
@@ -338,6 +401,14 @@ namespace ShareX
 
                 FileHelpers.DeleteFile(concatPath);
                 FileHelpers.DeleteFile(tempPath);
+
+                if (gifSegmentPaths != null)
+                {
+                    foreach (string gifSegmentPath in gifSegmentPaths)
+                    {
+                        FileHelpers.DeleteFile(gifSegmentPath);
+                    }
+                }
             }).ContinueInCurrentContext(() =>
             {
                 if (!abortRequested && !string.IsNullOrEmpty(path) && File.Exists(path) && TaskHelpers.ShowAfterCaptureForm(taskSettings, out string customFileName, null, path))
@@ -398,6 +469,43 @@ namespace ShareX
             }
 
             return output;
+        }
+
+        private static string ProcessGIFSegments(string outputPath, List<ScreenRecorder> gifSegments, GIFQuality quality, int frameDelay)
+        {
+            FileHelpers.CreateDirectoryFromFilePath(outputPath);
+
+            int totalFrames = 0;
+
+            foreach (ScreenRecorder gifSegment in gifSegments)
+            {
+                totalFrames += gifSegment.CachedFrameCount;
+            }
+
+            using (AnimatedGifCreator gifEncoder = new AnimatedGifCreator(outputPath, frameDelay))
+            {
+                int currentFrame = 0;
+
+                foreach (ScreenRecorder gifSegment in gifSegments)
+                {
+                    foreach (Image img in gifSegment.GetCachedFrames())
+                    {
+                        currentFrame++;
+
+                        if (totalFrames > 0)
+                        {
+                            ScreenRecorder_EncodingProgressChanged((int)((float)currentFrame / totalFrames * 100));
+                        }
+
+                        using (img)
+                        {
+                            gifEncoder.AddFrame(img, quality);
+                        }
+                    }
+                }
+            }
+
+            return outputPath;
         }
     }
 }

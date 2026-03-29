@@ -226,6 +226,17 @@
             cbScreenRecorderFixedDuration = new System.Windows.Forms.CheckBox();
             nudGIFFPS = new System.Windows.Forms.NumericUpDown();
             lblGIFFPS = new System.Windows.Forms.Label();
+            // HDR Recording controls
+            gbHDRRecording = new System.Windows.Forms.GroupBox();
+            cbScreenRecordHDREnabled = new System.Windows.Forms.CheckBox();
+            cbScreenRecordHDRCodec = new System.Windows.Forms.ComboBox();
+            lblScreenRecordHDRCodec = new System.Windows.Forms.Label();
+            cbScreenRecordHDRTransferFunction = new System.Windows.Forms.ComboBox();
+            lblScreenRecordHDRTransferFunction = new System.Windows.Forms.Label();
+            nudScreenRecordHDRBitrate = new System.Windows.Forms.NumericUpDown();
+            lblScreenRecordHDRBitrate = new System.Windows.Forms.Label();
+            cbScreenRecordHDRToneMap = new System.Windows.Forms.ComboBox();
+            lblScreenRecordHDRToneMap = new System.Windows.Forms.Label();
             tpOCR = new System.Windows.Forms.TabPage();
             btnCaptureOCRHelp = new System.Windows.Forms.Button();
             cbCaptureOCRAutoCopy = new System.Windows.Forms.CheckBox();
@@ -357,6 +368,7 @@
             ((System.ComponentModel.ISupportInitialize)nudRegionCaptureMagnifierPixelSize).BeginInit();
             tpScreenRecorder.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)nudScreenRecordFPS).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)nudScreenRecordHDRBitrate).BeginInit();
             ((System.ComponentModel.ISupportInitialize)nudScreenRecorderDuration).BeginInit();
             ((System.ComponentModel.ISupportInitialize)nudScreenRecorderStartDelay).BeginInit();
             ((System.ComponentModel.ISupportInitialize)nudGIFFPS).BeginInit();
@@ -1741,6 +1753,8 @@
             tpScreenRecorder.Controls.Add(cbScreenRecorderFixedDuration);
             tpScreenRecorder.Controls.Add(nudGIFFPS);
             tpScreenRecorder.Controls.Add(lblGIFFPS);
+            // HDR Recording controls
+            tpScreenRecorder.Controls.Add(gbHDRRecording);
             resources.ApplyResources(tpScreenRecorder, "tpScreenRecorder");
             tpScreenRecorder.Name = "tpScreenRecorder";
             // 
@@ -1851,6 +1865,113 @@
             // 
             resources.ApplyResources(lblGIFFPS, "lblGIFFPS");
             lblGIFFPS.Name = "lblGIFFPS";
+            // 
+            // gbHDRRecording
+            // 
+            gbHDRRecording.Controls.Add(cbScreenRecordHDREnabled);
+            gbHDRRecording.Controls.Add(cbScreenRecordHDRCodec);
+            gbHDRRecording.Controls.Add(lblScreenRecordHDRCodec);
+            gbHDRRecording.Controls.Add(cbScreenRecordHDRTransferFunction);
+            gbHDRRecording.Controls.Add(lblScreenRecordHDRTransferFunction);
+            gbHDRRecording.Controls.Add(nudScreenRecordHDRBitrate);
+            gbHDRRecording.Controls.Add(lblScreenRecordHDRBitrate);
+            gbHDRRecording.Controls.Add(cbScreenRecordHDRToneMap);
+            gbHDRRecording.Controls.Add(lblScreenRecordHDRToneMap);
+            gbHDRRecording.Location = new System.Drawing.Point(8, 280);
+            gbHDRRecording.Name = "gbHDRRecording";
+            gbHDRRecording.Size = new System.Drawing.Size(520, 200);
+            gbHDRRecording.TabIndex = 100;
+            gbHDRRecording.TabStop = false;
+            gbHDRRecording.Text = "HDR Recording";
+            // 
+            // cbScreenRecordHDREnabled
+            // 
+            cbScreenRecordHDREnabled.AutoSize = true;
+            cbScreenRecordHDREnabled.Location = new System.Drawing.Point(16, 24);
+            cbScreenRecordHDREnabled.Name = "cbScreenRecordHDREnabled";
+            cbScreenRecordHDREnabled.Size = new System.Drawing.Size(134, 19);
+            cbScreenRecordHDREnabled.TabIndex = 101;
+            cbScreenRecordHDREnabled.Text = "Enable HDR recording";
+            cbScreenRecordHDREnabled.UseVisualStyleBackColor = true;
+            cbScreenRecordHDREnabled.CheckedChanged += cbScreenRecordHDREnabled_CheckedChanged;
+            // 
+            // lblScreenRecordHDRCodec
+            // 
+            lblScreenRecordHDRCodec.AutoSize = true;
+            lblScreenRecordHDRCodec.Location = new System.Drawing.Point(16, 56);
+            lblScreenRecordHDRCodec.Name = "lblScreenRecordHDRCodec";
+            lblScreenRecordHDRCodec.Size = new System.Drawing.Size(70, 15);
+            lblScreenRecordHDRCodec.TabIndex = 102;
+            lblScreenRecordHDRCodec.Text = "HDR Codec:";
+            // 
+            // cbScreenRecordHDRCodec
+            // 
+            cbScreenRecordHDRCodec.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            cbScreenRecordHDRCodec.FormattingEnabled = true;
+            cbScreenRecordHDRCodec.Location = new System.Drawing.Point(160, 53);
+            cbScreenRecordHDRCodec.Name = "cbScreenRecordHDRCodec";
+            cbScreenRecordHDRCodec.Size = new System.Drawing.Size(200, 23);
+            cbScreenRecordHDRCodec.TabIndex = 103;
+            cbScreenRecordHDRCodec.SelectedIndexChanged += cbScreenRecordHDRCodec_SelectedIndexChanged;
+            // 
+            // lblScreenRecordHDRTransferFunction
+            // 
+            lblScreenRecordHDRTransferFunction.AutoSize = true;
+            lblScreenRecordHDRTransferFunction.Location = new System.Drawing.Point(16, 88);
+            lblScreenRecordHDRTransferFunction.Name = "lblScreenRecordHDRTransferFunction";
+            lblScreenRecordHDRTransferFunction.Size = new System.Drawing.Size(96, 15);
+            lblScreenRecordHDRTransferFunction.TabIndex = 104;
+            lblScreenRecordHDRTransferFunction.Text = "Transfer function:";
+            // 
+            // cbScreenRecordHDRTransferFunction
+            // 
+            cbScreenRecordHDRTransferFunction.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            cbScreenRecordHDRTransferFunction.FormattingEnabled = true;
+            cbScreenRecordHDRTransferFunction.Location = new System.Drawing.Point(160, 85);
+            cbScreenRecordHDRTransferFunction.Name = "cbScreenRecordHDRTransferFunction";
+            cbScreenRecordHDRTransferFunction.Size = new System.Drawing.Size(200, 23);
+            cbScreenRecordHDRTransferFunction.TabIndex = 105;
+            cbScreenRecordHDRTransferFunction.SelectedIndexChanged += cbScreenRecordHDRTransferFunction_SelectedIndexChanged;
+            // 
+            // lblScreenRecordHDRBitrate
+            // 
+            lblScreenRecordHDRBitrate.AutoSize = true;
+            lblScreenRecordHDRBitrate.Location = new System.Drawing.Point(16, 120);
+            lblScreenRecordHDRBitrate.Name = "lblScreenRecordHDRBitrate";
+            lblScreenRecordHDRBitrate.Size = new System.Drawing.Size(98, 15);
+            lblScreenRecordHDRBitrate.TabIndex = 106;
+            lblScreenRecordHDRBitrate.Text = "Bitrate (kbps):";
+            // 
+            // nudScreenRecordHDRBitrate
+            // 
+            nudScreenRecordHDRBitrate.Increment = new decimal(new int[] { 1000, 0, 0, 0 });
+            nudScreenRecordHDRBitrate.Location = new System.Drawing.Point(160, 118);
+            nudScreenRecordHDRBitrate.Maximum = new decimal(new int[] { 50000, 0, 0, 0 });
+            nudScreenRecordHDRBitrate.Minimum = new decimal(new int[] { 1000, 0, 0, 0 });
+            nudScreenRecordHDRBitrate.Name = "nudScreenRecordHDRBitrate";
+            nudScreenRecordHDRBitrate.Size = new System.Drawing.Size(100, 23);
+            nudScreenRecordHDRBitrate.TabIndex = 107;
+            nudScreenRecordHDRBitrate.Value = new decimal(new int[] { 8000, 0, 0, 0 });
+            nudScreenRecordHDRBitrate.ValueChanged += nudScreenRecordHDRBitrate_ValueChanged;
+            // 
+            // lblScreenRecordHDRToneMap
+            // 
+            lblScreenRecordHDRToneMap.AutoSize = true;
+            lblScreenRecordHDRToneMap.Location = new System.Drawing.Point(16, 152);
+            lblScreenRecordHDRToneMap.Name = "lblScreenRecordHDRToneMap";
+            lblScreenRecordHDRToneMap.Size = new System.Drawing.Size(135, 15);
+            lblScreenRecordHDRToneMap.TabIndex = 108;
+            lblScreenRecordHDRToneMap.Text = "GIF tone mapping (SDR fallback):";
+            // 
+            // cbScreenRecordHDRToneMap
+            // 
+            cbScreenRecordHDRToneMap.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            cbScreenRecordHDRToneMap.FormattingEnabled = true;
+            cbScreenRecordHDRToneMap.Location = new System.Drawing.Point(160, 149);
+            cbScreenRecordHDRToneMap.Name = "cbScreenRecordHDRToneMap";
+            cbScreenRecordHDRToneMap.Size = new System.Drawing.Size(200, 23);
+            cbScreenRecordHDRToneMap.TabIndex = 109;
+            cbScreenRecordHDRToneMap.SelectedIndexChanged += cbScreenRecordHDRToneMap_SelectedIndexChanged;
             // 
             // tpOCR
             // 
@@ -2545,6 +2666,7 @@
             tpScreenRecorder.ResumeLayout(false);
             tpScreenRecorder.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)nudScreenRecordFPS).EndInit();
+            ((System.ComponentModel.ISupportInitialize)nudScreenRecordHDRBitrate).EndInit();
             ((System.ComponentModel.ISupportInitialize)nudScreenRecorderDuration).EndInit();
             ((System.ComponentModel.ISupportInitialize)nudScreenRecorderStartDelay).EndInit();
             ((System.ComponentModel.ISupportInitialize)nudGIFFPS).EndInit();
@@ -2863,5 +2985,22 @@
         private System.Windows.Forms.CheckBox cbImageEditorUseLegacyImageEditor;
         private System.Windows.Forms.TabControl tcTools;
         private System.Windows.Forms.TabPage tpToolsGeneral;
+        private System.Windows.Forms.TabPage tpToolsImageEditor;
+        private System.Windows.Forms.CheckBox cbImageEditorExitConfirmation;
+        private System.Windows.Forms.CheckBox cbImageEditorZoomToFitOnOpen;
+        private System.Windows.Forms.CheckBox cbImageEditorAutoCloseEditorOnTask;
+        private System.Windows.Forms.CheckBox cbImageEditorAutoCopyImageToClipboard;
+
+        // HDR Recording controls
+        private System.Windows.Forms.GroupBox gbHDRRecording;
+        private System.Windows.Forms.CheckBox cbScreenRecordHDREnabled;
+        private System.Windows.Forms.ComboBox cbScreenRecordHDRCodec;
+        private System.Windows.Forms.Label lblScreenRecordHDRCodec;
+        private System.Windows.Forms.ComboBox cbScreenRecordHDRTransferFunction;
+        private System.Windows.Forms.Label lblScreenRecordHDRTransferFunction;
+        private System.Windows.Forms.NumericUpDown nudScreenRecordHDRBitrate;
+        private System.Windows.Forms.Label lblScreenRecordHDRBitrate;
+        private System.Windows.Forms.ComboBox cbScreenRecordHDRToneMap;
+        private System.Windows.Forms.Label lblScreenRecordHDRToneMap;
     }
 }

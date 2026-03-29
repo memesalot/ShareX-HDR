@@ -66,6 +66,13 @@ namespace ShareX.ScreenCaptureLib
         public int Vorbis_QScale { get; set; } = 3;
         public int MP3_QScale { get; set; } = 4;
 
+        // HDR
+        public bool HDR { get; set; } = false;
+        public HDRVideoCodec HDRVideoCodec { get; set; } = HDRVideoCodec.HDR10_HEVC;
+        public HDRTransferFunction HDRTransferFunction { get; set; } = HDRTransferFunction.PQ;
+        public HDRColorSpace HDRColorSpace { get; set; } = HDRColorSpace.BT2020;
+        public int HDR_Bitrate { get; set; } = 8000; // kbps, higher bitrate for HDR
+
         public string FFmpegPath
         {
             get
@@ -83,6 +90,11 @@ namespace ShareX.ScreenCaptureLib
         {
             get
             {
+                if (HDR && !IsAnimatedImage)
+                {
+                    return "mp4"; // HDR videos use MP4 container
+                }
+
                 if (!string.IsNullOrEmpty(VideoSource))
                 {
                     switch (VideoCodec)

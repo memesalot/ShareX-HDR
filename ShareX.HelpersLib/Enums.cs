@@ -96,6 +96,38 @@ namespace ShareX.HelpersLib
         RLE
     }
 
+    public enum HDRVideoCodec
+    {
+        [Description("HDR10 (H.265)")]
+        HDR10_HEVC,
+        [Description("HDR10 (H.265 NVENC)")]
+        HDR10_HEVC_NVENC,
+        [Description("HDR10 (H.265 AMF)")]
+        HDR10_HEVC_AMF,
+        [Description("HDR10 (H.265 QSV)")]
+        HDR10_HEVC_QSV,
+        [Description("HLG (H.265)")]
+        HLG_HEVC,
+        [Description("HLG (H.265 NVENC)")]
+        HLG_HEVC_NVENC
+    }
+
+    public enum HDRTransferFunction
+    {
+        [Description("PQ (SMPTE ST 2084)")]
+        PQ,
+        [Description("HLG (ARIB STD-B67)")]
+        HLG
+    }
+
+    public enum HDRColorSpace
+    {
+        [Description("BT.2020")]
+        BT2020,
+        [Description("DCI-P3")]
+        DCIP3
+    }
+
     public enum HashType
     {
         [Description("CRC-32")]

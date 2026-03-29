@@ -424,6 +424,18 @@ namespace ShareX
 
         #endregion Capture / Screen recorder
 
+        #region Capture / HDR Screen recorder
+
+        public bool ScreenRecordHDREnabled = false;
+        public HDRVideoCodec ScreenRecordHDRCodec = HDRVideoCodec.HDR10_HEVC_NVENC;
+        public HDRTransferFunction ScreenRecordHDRTransferFunction = HDRTransferFunction.PQ;
+        public HDRColorSpace ScreenRecordHDRColorSpace = HDRColorSpace.BT2020;
+        public HDRToneMapAlgorithm ScreenRecordHDRToneMap = HDRToneMapAlgorithm.AgX;
+        public int ScreenRecordHDRBitrate = 8000; // kbps
+        public bool ScreenRecordHDRAutoFallback = true;
+
+        #endregion Capture / HDR Screen recorder
+
         #region Capture / Scrolling capture
 
         public ScrollingCaptureOptions ScrollingCaptureOptions = new ScrollingCaptureOptions();

@@ -353,6 +353,17 @@ namespace ShareX
             cbScreenRecordTransparentRegion.Checked = TaskSettings.CaptureSettings.ScreenRecordTransparentRegion;
             cbScreenRecordConfirmAbort.Checked = TaskSettings.CaptureSettings.ScreenRecordAskConfirmationOnAbort;
 
+            // HDR Recording settings
+            cbScreenRecordHDREnabled.Checked = TaskSettings.CaptureSettings.ScreenRecordHDREnabled;
+            cbScreenRecordHDRCodec.Items.AddRange(Helpers.GetLocalizedEnumDescriptions<HDRVideoCodec>());
+            cbScreenRecordHDRCodec.SelectedIndex = (int)TaskSettings.CaptureSettings.ScreenRecordHDRCodec;
+            cbScreenRecordHDRTransferFunction.Items.AddRange(Helpers.GetLocalizedEnumDescriptions<HDRTransferFunction>());
+            cbScreenRecordHDRTransferFunction.SelectedIndex = (int)TaskSettings.CaptureSettings.ScreenRecordHDRTransferFunction;
+            nudScreenRecordHDRBitrate.SetValue(TaskSettings.CaptureSettings.ScreenRecordHDRBitrate);
+            cbScreenRecordHDRToneMap.Items.AddRange(Helpers.GetLocalizedEnumDescriptions<HDRToneMapAlgorithm>());
+            cbScreenRecordHDRToneMap.SelectedIndex = (int)TaskSettings.CaptureSettings.ScreenRecordHDRToneMap;
+            UpdateHDRRecordingControls();
+
             #endregion Screen recorder
 
             #region OCR
@@ -1386,6 +1397,58 @@ namespace ShareX
         }
 
         #endregion Screen recorder
+
+        #region HDR Recording
+
+        private void cbScreenRecordHDREnabled_CheckedChanged(object sender, EventArgs e)
+        {
+            TaskSettings.CaptureSettings.ScreenRecordHDREnabled = cbScreenRecordHDREnabled.Checked;
+            UpdateHDRRecordingControls();
+        }
+
+        private void cbScreenRecordHDRCodec_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (loaded && cbScreenRecordHDRCodec.SelectedIndex > -1)
+            {
+                TaskSettings.CaptureSettings.ScreenRecordHDRCodec = (HDRVideoCodec)cbScreenRecordHDRCodec.SelectedIndex;
+            }
+        }
+
+        private void cbScreenRecordHDRTransferFunction_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (loaded && cbScreenRecordHDRTransferFunction.SelectedIndex > -1)
+            {
+                TaskSettings.CaptureSettings.ScreenRecordHDRTransferFunction = (HDRTransferFunction)cbScreenRecordHDRTransferFunction.SelectedIndex;
+            }
+        }
+
+        private void nudScreenRecordHDRBitrate_ValueChanged(object sender, EventArgs e)
+        {
+            TaskSettings.CaptureSettings.ScreenRecordHDRBitrate = (int)nudScreenRecordHDRBitrate.Value;
+        }
+
+        private void cbScreenRecordHDRToneMap_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (loaded && cbScreenRecordHDRToneMap.SelectedIndex > -1)
+            {
+                TaskSettings.CaptureSettings.ScreenRecordHDRToneMap = (HDRToneMapAlgorithm)cbScreenRecordHDRToneMap.SelectedIndex;
+            }
+        }
+
+        private void UpdateHDRRecordingControls()
+        {
+            bool enabled = cbScreenRecordHDREnabled.Checked;
+            cbScreenRecordHDRCodec.Enabled = enabled;
+            lblScreenRecordHDRCodec.Enabled = enabled;
+            cbScreenRecordHDRTransferFunction.Enabled = enabled;
+            lblScreenRecordHDRTransferFunction.Enabled = enabled;
+            nudScreenRecordHDRBitrate.Enabled = enabled;
+            lblScreenRecordHDRBitrate.Enabled = enabled;
+            cbScreenRecordHDRToneMap.Enabled = enabled;
+            lblScreenRecordHDRToneMap.Enabled = enabled;
+        }
+
+        #endregion HDR Recording
 
         #region OCR
 

@@ -26,6 +26,7 @@
 using ShareX.HelpersLib;
 using ShareX.MediaLib;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Text;
@@ -172,6 +173,13 @@ namespace ShareX.ScreenCaptureLib
                     Stopwatch timer = Stopwatch.StartNew();
 
                     Image img = screenshot.CaptureRectangle(CaptureRectangle);
+
+                    if (OutputType == ScreenRecordOutput.GIF && Options.FFmpeg.HDR && screenshot.LastHDRCaptureResult != null)
+                    {
+                        img?.Dispose();
+                        img = screenshot.LastHDRCaptureResult.ToSDRBitmap(screenshot.HDRToneMapAlgorithm);
+                    }
+
                     //DebugHelper.WriteLine("Screen capture: " + (int)timer.ElapsedMilliseconds);
 
                     imgCache.AddImageAsync(img);
@@ -209,27 +217,43 @@ namespace ShareX.ScreenCaptureLib
 
         public void SaveAsGIF(string path, GIFQuality quality)
         {
-            if (imgCache != null && imgCache is HardDiskCache && !IsRecording)
+            if (!IsRecording)
             {
                 FileHelpers.CreateDirectoryFromFilePath(path);
 
-                HardDiskCache hdCache = imgCache as HardDiskCache;
-
                 using (AnimatedGifCreator gifEncoder = new AnimatedGifCreator(path, delay))
                 {
-                    int i = 0;
-                    int count = hdCache.Count;
-
-                    foreach (Image img in hdCache.GetImageEnumerator())
+                    foreach (Image img in GetCachedFrames())
                     {
-                        i++;
-                        OnEncodingProgressChanged((int)((float)i / count * 100));
-
                         using (img)
                         {
                             gifEncoder.AddFrame(img, quality);
                         }
                     }
+                }
+            }
+        }
+
+        public int CachedFrameCount
+        {
+            get
+            {
+                if (imgCache is HardDiskCache hdCache)
+                {
+                    return hdCache.Count;
+                }
+
+                return 0;
+            }
+        }
+
+        public IEnumerable<Image> GetCachedFrames()
+        {
+            if (imgCache is HardDiskCache hdCache && !IsRecording)
+            {
+                foreach (Image img in hdCache.GetImageEnumerator())
+                {
+                    yield return img;
                 }
             }
         }
