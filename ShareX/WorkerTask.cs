@@ -25,6 +25,7 @@
 
 using ShareX.HelpersLib;
 using ShareX.Properties;
+using ShareX.ScreenCaptureLib;
 using ShareX.UploadersLib;
 using System;
 using System.Collections.Generic;
@@ -64,6 +65,7 @@ namespace ShareX
         private ThreadWorker threadWorker;
         private GenericUploader uploader;
         private TaskReferenceHelper taskReferenceHelper;
+        private ImageData preparedImageData;
 
         #region Constructors
 
@@ -576,9 +578,15 @@ namespace ShareX
                 return true;
             }
 
+            if (!ValidateInitialHDRCapture())
+            {
+                return false;
+            }
+
             if (Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.BeautifyImage))
             {
                 Image = TaskHelpers.BeautifyImage(Image, Info.TaskSettings);
+                ClearHDRData();
 
                 if (Image == null)
                 {
@@ -589,6 +597,7 @@ namespace ShareX
             if (Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.AddImageEffects))
             {
                 Image = TaskHelpers.ApplyImageEffects(Image, Info.TaskSettings.ImageSettingsReference);
+                ClearHDRData();
 
                 if (Image == null)
                 {
@@ -600,6 +609,7 @@ namespace ShareX
             if (Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.AnnotateImage))
             {
                 Image = TaskHelpers.AnnotateImage(Image, null, Info.TaskSettings, true);
+                ClearHDRData();
 
                 if (Image == null)
                 {
@@ -629,9 +639,43 @@ namespace ShareX
             if (Info.TaskSettings.AfterCaptureJob.HasFlagAny(AfterCaptureTasks.SaveImageToFile, AfterCaptureTasks.SaveImageToFileWithDialog, AfterCaptureTasks.DoOCR,
                 AfterCaptureTasks.UploadImageToHost, AfterCaptureTasks.AnalyzeImage))
             {
-                ImageData imageData = TaskHelpers.PrepareImage(Image, Info.TaskSettings);
-                Data = imageData.ImageStream;
-                Info.FileName = Path.ChangeExtension(Info.FileName, imageData.ImageFormat.GetDescription());
+                EImageFormat selectedFormat = Info.TaskSettings.ImageSettings.ImageFormat;
+                bool strictHDROutput = TaskHelpers.IsStrictHDROutput(selectedFormat);
+                bool requiresHDRSource = TaskHelpers.RequiresHDRSource(selectedFormat, Info.TaskSettings);
+                bool allowSDRFallback = Info.TaskSettings.ImageSettings.HDRAutoFallbackToSDR;
+
+                if (!ValidateHDRAvailability(requiresHDRSource, strictHDROutput, allowSDRFallback))
+                {
+                    return false;
+                }
+
+                preparedImageData?.Dispose();
+                preparedImageData = null;
+
+                if (Info.Metadata.HDRData != null && requiresHDRSource)
+                {
+                    preparedImageData = TaskHelpers.PrepareImageHDR(Info.Metadata.HDRData, Image, Info.TaskSettings, out string hdrSaveError);
+
+                    if (preparedImageData == null)
+                    {
+                        AddErrorMessage(!string.IsNullOrWhiteSpace(hdrSaveError) ? hdrSaveError : GetHDRSaveFailureMessage(strictHDROutput, allowSDRFallback));
+                        return false;
+                    }
+                }
+
+                if (preparedImageData == null)
+                {
+                    preparedImageData = TaskHelpers.PrepareImage(Image, Info.TaskSettings);
+                }
+
+                Data = preparedImageData.OpenReadStream();
+                Info.FileName = Path.ChangeExtension(Info.FileName, preparedImageData.ImageFormat.GetDescription());
+
+                if (Info.IsUploadJob && Data == null)
+                {
+                    AddErrorMessage("Failed to open prepared image data for upload.");
+                    return false;
+                }
 
                 if (Info.TaskSettings.AfterCaptureJob.HasFlagAny(AfterCaptureTasks.SaveImageToFile, AfterCaptureTasks.AnalyzeImage))
                 {
@@ -641,7 +685,7 @@ namespace ShareX
                     if (!string.IsNullOrEmpty(filePath))
                     {
                         Info.FilePath = filePath;
-                        imageData.Write(Info.FilePath);
+                        preparedImageData.Write(Info.FilePath);
                         DebugHelper.WriteLine("Image saved to file: " + Info.FilePath);
                     }
                 }
@@ -675,7 +719,7 @@ namespace ShareX
                             {
                                 Info.FilePath = sfd.FileName;
                                 HelpersOptions.LastSaveDirectory = Path.GetDirectoryName(Info.FilePath);
-                                imageSaved = imageData.Write(Info.FilePath);
+                                imageSaved = preparedImageData.Write(Info.FilePath);
 
                                 if (imageSaved)
                                 {
@@ -715,6 +759,82 @@ namespace ShareX
             }
 
             return true;
+        }
+
+        private void ClearHDRData()
+        {
+            if (Info?.Metadata?.HDRData != null)
+            {
+                Info.Metadata.HDRData.Dispose();
+                Info.Metadata.HDRData = null;
+            }
+        }
+
+        private bool ValidateInitialHDRCapture()
+        {
+            if (!Info.TaskSettings.ImageSettings.HDRCaptureEnabled || Info.Metadata == null || Info.Metadata.HDRData != null ||
+                Info.TaskSettings.ImageSettings.HDRAutoFallbackToSDR)
+            {
+                return true;
+            }
+
+            if (Info.Metadata.HDRCaptureStatus == HDRCaptureStatus.Unavailable || Info.Metadata.HDRCaptureStatus == HDRCaptureStatus.Failed)
+            {
+                AddErrorMessage(GetHDRUnavailableMessage(false, false));
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool ValidateHDRAvailability(bool requiresHDRSource, bool strictHDROutput, bool allowSDRFallback)
+        {
+            if (Info.Metadata == null || !requiresHDRSource || Info.Metadata.HDRData != null)
+            {
+                return true;
+            }
+
+            if (strictHDROutput || !allowSDRFallback)
+            {
+                AddErrorMessage(GetHDRUnavailableMessage(strictHDROutput, allowSDRFallback));
+                return false;
+            }
+
+            return true;
+        }
+
+        private string GetHDRUnavailableMessage(bool strictHDROutput, bool allowSDRFallback)
+        {
+            string message = !string.IsNullOrEmpty(Info.Metadata.HDRErrorMessage)
+                ? Info.Metadata.HDRErrorMessage
+                : "HDR capture data is not available.";
+
+            if (strictHDROutput)
+            {
+                message += " The selected file format requires HDR data.";
+            }
+            else if (!allowSDRFallback)
+            {
+                message += " Automatic SDR fallback is disabled.";
+            }
+
+            return message;
+        }
+
+        private string GetHDRSaveFailureMessage(bool strictHDROutput, bool allowSDRFallback)
+        {
+            string message = "HDR image save failed.";
+
+            if (strictHDROutput)
+            {
+                message += " The selected file format requires valid HDR output.";
+            }
+            else if (!allowSDRFallback)
+            {
+                message += " Automatic SDR fallback is disabled.";
+            }
+
+            return message;
         }
 
         private void DoFileJobs()
@@ -1222,6 +1342,12 @@ namespace ShareX
             {
                 Data.Dispose();
                 Data = null;
+            }
+
+            if (preparedImageData != null)
+            {
+                preparedImageData.Dispose();
+                preparedImageData = null;
             }
 
             if (!KeepImage && Image != null)

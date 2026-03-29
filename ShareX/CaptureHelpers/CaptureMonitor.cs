@@ -23,6 +23,7 @@
 
 #endregion License Information (GPL v3)
 
+using ShareX.ScreenCaptureLib;
 using System.Drawing;
 
 namespace ShareX
@@ -39,7 +40,9 @@ namespace ShareX
         protected override TaskMetadata Execute(TaskSettings taskSettings)
         {
             TaskMetadata metadata = CreateMetadata(MonitorRectangle);
-            metadata.Image = TaskHelpers.GetScreenshot().CaptureRectangle(MonitorRectangle);
+            Screenshot screenshot = TaskHelpers.GetScreenshot(taskSettings);
+            metadata.Image = screenshot.CaptureRectangle(MonitorRectangle);
+            TaskHelpers.TransferHDRData(screenshot, metadata);
             return metadata;
         }
     }

@@ -24,6 +24,7 @@
 #endregion License Information (GPL v3)
 
 using ShareX.HelpersLib;
+using ShareX.ScreenCaptureLib;
 using System;
 using System.Threading;
 
@@ -62,16 +63,18 @@ namespace ShareX
 
             TaskMetadata metadata = new TaskMetadata();
             metadata.UpdateInfo(windowInfo);
+            Screenshot screenshot = TaskHelpers.GetScreenshot(taskSettings);
 
             if (taskSettings.CaptureSettings.CaptureTransparent && !taskSettings.CaptureSettings.CaptureClientArea)
             {
-                metadata.Image = TaskHelpers.GetScreenshot(taskSettings).CaptureWindowTransparent(WindowHandle);
+                metadata.Image = screenshot.CaptureWindowTransparent(WindowHandle);
             }
             else
             {
-                metadata.Image = TaskHelpers.GetScreenshot(taskSettings).CaptureWindow(WindowHandle);
+                metadata.Image = screenshot.CaptureWindow(WindowHandle);
             }
 
+            TaskHelpers.TransferHDRData(screenshot, metadata);
             return metadata;
         }
     }

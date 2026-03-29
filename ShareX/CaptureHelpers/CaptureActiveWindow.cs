@@ -23,6 +23,8 @@
 
 #endregion License Information (GPL v3)
 
+using ShareX.ScreenCaptureLib;
+
 namespace ShareX
 {
     public class CaptureActiveWindow : CaptureBase
@@ -30,16 +32,18 @@ namespace ShareX
         protected override TaskMetadata Execute(TaskSettings taskSettings)
         {
             TaskMetadata metadata = CreateMetadata();
+            Screenshot screenshot = TaskHelpers.GetScreenshot(taskSettings);
 
             if (taskSettings.CaptureSettings.CaptureTransparent && !taskSettings.CaptureSettings.CaptureClientArea)
             {
-                metadata.Image = TaskHelpers.GetScreenshot(taskSettings).CaptureActiveWindowTransparent();
+                metadata.Image = screenshot.CaptureActiveWindowTransparent();
             }
             else
             {
-                metadata.Image = TaskHelpers.GetScreenshot(taskSettings).CaptureActiveWindow();
+                metadata.Image = screenshot.CaptureActiveWindow();
             }
 
+            TaskHelpers.TransferHDRData(screenshot, metadata);
             return metadata;
         }
     }

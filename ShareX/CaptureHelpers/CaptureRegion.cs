@@ -73,16 +73,17 @@ namespace ShareX
             }
 
             Bitmap canvas;
-            Screenshot screenshot = TaskHelpers.GetScreenshot(taskSettings);
-            screenshot.CaptureCursor = false;
+            Screenshot previewScreenshot = TaskHelpers.GetScreenshot(taskSettings);
+            previewScreenshot.CaptureCursor = false;
+            previewScreenshot.CaptureHDR = false;
 
             if (taskSettings.CaptureSettings.SurfaceOptions.ActiveMonitorMode)
             {
-                canvas = screenshot.CaptureActiveMonitor();
+                canvas = previewScreenshot.CaptureActiveMonitor();
             }
             else
             {
-                canvas = screenshot.CaptureFullscreen();
+                canvas = previewScreenshot.CaptureFullscreen();
             }
 
             CursorData cursorData = null;
@@ -101,12 +102,43 @@ namespace ShareX
 
                 form.ShowDialog();
 
-                Bitmap result = form.GetResultImage();
+                TaskMetadata metadata = null;
 
-                if (result != null)
+                if (taskSettings.ImageSettings.HDRCaptureEnabled && form.IsPlainRectangleRegionSelection)
                 {
-                    TaskMetadata metadata = new TaskMetadata(result);
+                    Rectangle captureRect = form.GetSelectedRectangle();
 
+                    if (!captureRect.IsEmpty)
+                    {
+                        Screenshot regionScreenshot = TaskHelpers.GetScreenshot(taskSettings);
+                        Bitmap hdrResult = regionScreenshot.CaptureRectangle(captureRect);
+
+                        if (hdrResult != null)
+                        {
+                            metadata = new TaskMetadata(hdrResult);
+                            TaskHelpers.TransferHDRData(regionScreenshot, metadata);
+                        }
+                    }
+                }
+
+                if (metadata == null)
+                {
+                    Bitmap result = form.GetResultImage();
+
+                    if (result != null)
+                    {
+                        metadata = new TaskMetadata(result);
+                        TaskHelpers.TransferHDRData(previewScreenshot, metadata, false);
+                    }
+                }
+
+                if (!ReferenceEquals(metadata?.HDRData, previewScreenshot.LastHDRCaptureResult))
+                {
+                    previewScreenshot.LastHDRCaptureResult?.Dispose();
+                }
+
+                if (metadata != null)
+                {
                     if (form.IsImageModified)
                     {
                         AllowAnnotation = false;
@@ -130,15 +162,16 @@ namespace ShareX
         protected TaskMetadata ExecuteRegionCaptureLight(TaskSettings taskSettings)
         {
             Bitmap canvas;
-            Screenshot screenshot = TaskHelpers.GetScreenshot(taskSettings);
+            Screenshot previewScreenshot = TaskHelpers.GetScreenshot(taskSettings);
+            previewScreenshot.CaptureHDR = false;
 
             if (taskSettings.CaptureSettings.SurfaceOptions.ActiveMonitorMode)
             {
-                canvas = screenshot.CaptureActiveMonitor();
+                canvas = previewScreenshot.CaptureActiveMonitor();
             }
             else
             {
-                canvas = screenshot.CaptureFullscreen();
+                canvas = previewScreenshot.CaptureFullscreen();
             }
 
             bool activeMonitorMode = taskSettings.CaptureSettings.SurfaceOptions.ActiveMonitorMode;
@@ -147,13 +180,16 @@ namespace ShareX
             {
                 if (rectangleLight.ShowDialog() == DialogResult.OK)
                 {
-                    Bitmap result = rectangleLight.GetAreaImage();
+                    Screenshot captureScreenshot = TaskHelpers.GetScreenshot(taskSettings);
+                    Bitmap result = rectangleLight.GetAreaImage(captureScreenshot);
 
                     if (result != null)
                     {
                         lastRegionCaptureType = RegionCaptureType.Light;
 
-                        return new TaskMetadata(result);
+                        TaskMetadata metadata = new TaskMetadata(result);
+                        TaskHelpers.TransferHDRData(captureScreenshot, metadata);
+                        return metadata;
                     }
                 }
             }
@@ -176,7 +212,9 @@ namespace ShareX
                     {
                         lastRegionCaptureType = RegionCaptureType.Transparent;
 
-                        return new TaskMetadata(result);
+                        TaskMetadata metadata = new TaskMetadata(result);
+                        TaskHelpers.TransferHDRData(screenshot, metadata);
+                        return metadata;
                     }
                 }
             }

@@ -19,6 +19,7 @@
     <PackageReference Include="Newtonsoft.Json" />
     <PackageReference Include="SkiaSharp" />
     <PackageReference Include="SkiaSharp.Views.WindowsForms" />
+    <PackageReference Include="Starward.Codec" />
     <PackageReference Include="ZXing.Net" />
     <PackageReference Include="ZXing.Net.Bindings.Windows.Compatibility" />
   </ItemGroup>

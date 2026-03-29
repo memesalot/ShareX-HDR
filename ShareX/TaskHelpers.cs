@@ -415,6 +415,112 @@ namespace ShareX
             return imageData;
         }
 
+        public static ImageData PrepareImageHDR(HDRCaptureResult hdrData, Image sdrPreview, TaskSettings taskSettings, out string errorMessage)
+        {
+            errorMessage = null;
+            EImageFormat format = taskSettings.ImageSettings.ImageFormat;
+
+            if (RequiresHDRSource(format, taskSettings))
+            {
+                if (hdrData == null)
+                {
+                    errorMessage = "HDR image save failed because HDR capture data is not available.";
+                    return null;
+                }
+
+                return SaveHDRImage(hdrData, sdrPreview, format, taskSettings, out errorMessage);
+            }
+
+            // For SDR formats, use the tone-mapped preview through the normal path
+            return PrepareImage(sdrPreview, taskSettings);
+        }
+
+        public static ImageData SaveHDRImage(HDRCaptureResult hdrData, Image sdrPreview, EImageFormat format, TaskSettings taskSettings, out string errorMessage)
+        {
+            errorMessage = null;
+
+            if (hdrData == null)
+            {
+                errorMessage = "HDR image save failed because HDR capture data is not available.";
+                return null;
+            }
+
+            ImageData imageData = new ImageData
+            {
+                ImageFormat = format
+            };
+
+            string tempOutputPath = Path.Combine(Path.GetTempPath(), $"sharex_hdr_out_{Guid.NewGuid():N}.{format.GetDescription()}");
+
+            try
+            {
+                bool success = false;
+
+                switch (format)
+                {
+                    case EImageFormat.EXR:
+                        EXRWriter.Write(tempOutputPath, hdrData.PixelData, hdrData.Width, hdrData.Height, hdrData.Stride, hdrData.PixelFormat,
+                            taskSettings.ImageSettings.HDREXRCompression);
+                        success = File.Exists(tempOutputPath) && new FileInfo(tempOutputPath).Length > 0;
+                        break;
+                    case EImageFormat.HDR:
+                        success = RadianceHDRWriter.TryWrite(tempOutputPath, hdrData, out errorMessage);
+                        break;
+                    case EImageFormat.JPEG when taskSettings.ImageSettings.HDRJPEGGainMap:
+                        success = UltraHdrJpegWriter.TryWrite(tempOutputPath, hdrData, sdrPreview, taskSettings.ImageSettings.HDRJPEGGainMapSDRQuality, out errorMessage);
+                        break;
+                    default:
+                        errorMessage = $"HDR image save is not supported for {format}.";
+                        return null;
+                }
+
+                if (success && File.Exists(tempOutputPath))
+                {
+                    imageData.HDRFilePath = tempOutputPath;
+                    return imageData;
+                }
+
+                if (string.IsNullOrWhiteSpace(errorMessage))
+                {
+                    errorMessage = "HDR image save failed because the output file could not be created.";
+                }
+
+                if (File.Exists(tempOutputPath))
+                {
+                    try
+                    {
+                        File.Delete(tempOutputPath);
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                return null;
+            }
+            catch (Exception e)
+            {
+                DebugHelper.WriteException(e, "HDR image save failed.");
+                errorMessage = e.Message;
+                return null;
+            }
+        }
+
+        public static bool IsStrictHDROutput(EImageFormat format)
+        {
+            return format == EImageFormat.EXR || format == EImageFormat.HDR;
+        }
+
+        public static bool ShouldUseHDRJPEGGainMap(EImageFormat format, TaskSettings taskSettings)
+        {
+            return format == EImageFormat.JPEG && taskSettings?.ImageSettings?.HDRJPEGGainMap == true;
+        }
+
+        public static bool RequiresHDRSource(EImageFormat format, TaskSettings taskSettings)
+        {
+            return IsStrictHDROutput(format) || ShouldUseHDRJPEGGainMap(format, taskSettings);
+        }
+
         public static string CreateThumbnail(Bitmap bmp, string folder, string fileName, TaskSettings taskSettings)
         {
             if ((taskSettings.ImageSettings.ThumbnailWidth > 0 || taskSettings.ImageSettings.ThumbnailHeight > 0) && (!taskSettings.ImageSettings.ThumbnailCheckSize ||
@@ -2239,10 +2345,32 @@ namespace ShareX
                 RemoveOutsideScreenArea = true,
                 CaptureShadow = taskSettings.CaptureSettings.CaptureShadow,
                 ShadowOffset = taskSettings.CaptureSettings.CaptureShadowOffset,
-                AutoHideTaskbar = taskSettings.CaptureSettings.CaptureAutoHideTaskbar
+                AutoHideTaskbar = taskSettings.CaptureSettings.CaptureAutoHideTaskbar,
+                CaptureHDR = taskSettings.ImageSettings.HDRCaptureEnabled,
+                HDRToneMapAlgorithm = taskSettings.ImageSettings.HDRToneMapAlgorithm
             };
 
             return screenshot;
+        }
+
+        /// <summary>
+        /// Transfers HDR capture data from a Screenshot object to the TaskMetadata.
+        /// Call this after using GetScreenshot() to capture an image.
+        /// </summary>
+        public static void TransferHDRData(Screenshot screenshot, TaskMetadata metadata, bool includeData = true)
+        {
+            if (screenshot == null || metadata == null)
+            {
+                return;
+            }
+
+            metadata.HDRCaptureStatus = screenshot.LastHDRCaptureStatus;
+            metadata.HDRErrorMessage = screenshot.LastHDRCaptureError;
+
+            if (includeData && screenshot.LastHDRCaptureResult != null)
+            {
+                metadata.HDRData = screenshot.LastHDRCaptureResult;
+            }
         }
 
         public static void ImportCustomUploader(string filePath)

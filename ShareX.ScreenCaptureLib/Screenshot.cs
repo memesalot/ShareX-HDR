@@ -30,6 +30,14 @@ using System.Drawing.Imaging;
 
 namespace ShareX.ScreenCaptureLib
 {
+    public enum HDRCaptureStatus
+    {
+        Disabled,
+        Succeeded,
+        Unavailable,
+        Failed
+    }
+
     public partial class Screenshot
     {
         public bool CaptureCursor { get; set; } = false;
@@ -38,6 +46,16 @@ namespace ShareX.ScreenCaptureLib
         public bool CaptureShadow { get; set; } = false;
         public int ShadowOffset { get; set; } = 20;
         public bool AutoHideTaskbar { get; set; } = false;
+        public bool CaptureHDR { get; set; } = false;
+        public HDRToneMapAlgorithm HDRToneMapAlgorithm { get; set; } = HDRToneMapAlgorithm.ACES;
+
+        /// <summary>
+        /// Stores HDR capture data from the last capture when CaptureHDR is enabled.
+        /// Null if HDR capture was not performed or fell back to SDR.
+        /// </summary>
+        public HDRCaptureResult LastHDRCaptureResult { get; private set; }
+        public HDRCaptureStatus LastHDRCaptureStatus { get; private set; } = HDRCaptureStatus.Disabled;
+        public string LastHDRCaptureError { get; private set; }
 
         public Bitmap CaptureRectangle(Rectangle rect)
         {
@@ -45,6 +63,45 @@ namespace ShareX.ScreenCaptureLib
             {
                 Rectangle bounds = CaptureHelpers.GetScreenBounds();
                 rect = Rectangle.Intersect(bounds, rect);
+            }
+
+            LastHDRCaptureResult = null;
+            LastHDRCaptureError = null;
+            LastHDRCaptureStatus = HDRCaptureStatus.Disabled;
+
+            if (CaptureHDR)
+            {
+                try
+                {
+                    if (HDRScreenshot.IsAnyHDRAvailable())
+                    {
+                        using (HDRScreenshot hdrCapture = new HDRScreenshot())
+                        {
+                            LastHDRCaptureResult = hdrCapture.CaptureRectangleHDR(rect, CaptureCursor);
+                        }
+
+                        if (LastHDRCaptureResult != null)
+                        {
+                            LastHDRCaptureStatus = HDRCaptureStatus.Succeeded;
+                            return LastHDRCaptureResult.ToSDRBitmap(HDRToneMapAlgorithm);
+                        }
+
+                        LastHDRCaptureStatus = HDRCaptureStatus.Failed;
+                        LastHDRCaptureError = "HDR capture did not return any pixel data.";
+                    }
+                    else
+                    {
+                        LastHDRCaptureStatus = HDRCaptureStatus.Unavailable;
+                        LastHDRCaptureError = "HDR capture is not available on any display.";
+                    }
+                }
+                catch (Exception e)
+                {
+                    DebugHelper.WriteException(e, "HDR capture failed, falling back to SDR.");
+                    LastHDRCaptureStatus = HDRCaptureStatus.Failed;
+                    LastHDRCaptureError = e.Message;
+                    LastHDRCaptureResult = null;
+                }
             }
 
             return CaptureRectangleNative(rect, CaptureCursor);

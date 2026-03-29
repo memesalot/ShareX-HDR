@@ -61,6 +61,11 @@ namespace ShareX.ScreenCaptureLib
         public bool IsEditorMode => Mode == RegionCaptureMode.Editor || Mode == RegionCaptureMode.TaskEditor;
         public bool IsAnnotationMode => Mode == RegionCaptureMode.Annotation || IsEditorMode;
         public bool IsImageModified => ShapeManager != null && ShapeManager.IsImageModified;
+        public bool IsPlainRectangleRegionSelection => Result == RegionResult.Region &&
+            ShapeManager != null &&
+            ShapeManager.IsCurrentShapeValid &&
+            ShapeManager.CurrentShape?.ShapeType == ShapeType.RegionRectangle &&
+            !IsImageModified;
 
         public Point CurrentPosition { get; private set; }
         public SimpleWindowInfo SelectedWindow { get; private set; }

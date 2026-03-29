@@ -63,7 +63,37 @@ namespace ShareX.HelpersLib
         [Description("bmp")]
         BMP,
         [Description("tif")]
-        TIFF
+        TIFF,
+        [Description("exr")]
+        EXR,
+        [Description("hdr")]
+        HDR
+    }
+
+    public enum HDRToneMapAlgorithm
+    {
+        [Description("ACES")]
+        ACES,
+        [Description("Khronos Neutral")]
+        KhronosNeutral,
+        [Description("AgX")]
+        AgX,
+        [Description("Reinhard")]
+        Reinhard
+    }
+
+    public enum EXRCompression
+    {
+        [Description("None")]
+        None,
+        [Description("ZIP")]
+        ZIP,
+        [Description("ZIPS")]
+        ZIPS,
+        [Description("PIZ")]
+        PIZ,
+        [Description("RLE")]
+        RLE
     }
 
     public enum HashType

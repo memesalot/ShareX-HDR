@@ -30,6 +30,7 @@ using ShareX.UploadersLib;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Windows.Forms;
 
@@ -182,6 +183,8 @@ namespace ShareX
             }
 
             UpdateDefaultSettingVisibility();
+
+            InitializeHDRControls();
 
             tttvMain.MainTabControl = tcTaskSettings;
 
@@ -1861,5 +1864,152 @@ namespace ShareX
         }
 
         #endregion Advanced
+
+        #region HDR
+
+        private CheckBox cbHDRCaptureEnabled;
+        private CheckBox cbHDRAutoFallbackToSDR;
+        private ComboBox cbHDRToneMapAlgorithm;
+        private ComboBox cbHDREXRCompression;
+        private CheckBox cbHDRJPEGGainMap;
+        private Label lblHDRToneMap;
+        private Label lblHDREXRCompression;
+        private Label lblHDRCodecStatus;
+        private TabPage tpHDR;
+
+        private void InitializeHDRControls()
+        {
+            tpHDR = new TabPage("HDR");
+            tpHDR.BackColor = SystemColors.Window;
+            tpHDR.Padding = new Padding(6);
+
+            int yPos = 12;
+            int labelX = 12;
+            int controlX = 200;
+            int controlWidth = 200;
+            int rowHeight = 30;
+
+            // Enable HDR capture checkbox
+            cbHDRCaptureEnabled = new CheckBox();
+            cbHDRCaptureEnabled.Text = "Enable HDR capture";
+            cbHDRCaptureEnabled.Location = new Point(labelX, yPos);
+            cbHDRCaptureEnabled.AutoSize = true;
+            cbHDRCaptureEnabled.Checked = TaskSettings.ImageSettings.HDRCaptureEnabled;
+            cbHDRCaptureEnabled.CheckedChanged += cbHDRCaptureEnabled_CheckedChanged;
+            tpHDR.Controls.Add(cbHDRCaptureEnabled);
+            yPos += rowHeight;
+
+            // Auto fallback to SDR checkbox
+            cbHDRAutoFallbackToSDR = new CheckBox();
+            cbHDRAutoFallbackToSDR.Text = "Automatically fall back to SDR when HDR is not available";
+            cbHDRAutoFallbackToSDR.Location = new Point(labelX, yPos);
+            cbHDRAutoFallbackToSDR.AutoSize = true;
+            cbHDRAutoFallbackToSDR.Checked = TaskSettings.ImageSettings.HDRAutoFallbackToSDR;
+            cbHDRAutoFallbackToSDR.CheckedChanged += cbHDRAutoFallbackToSDR_CheckedChanged;
+            tpHDR.Controls.Add(cbHDRAutoFallbackToSDR);
+            yPos += rowHeight;
+
+            // Tone mapping algorithm
+            lblHDRToneMap = new Label();
+            lblHDRToneMap.Text = "Tone mapping algorithm:";
+            lblHDRToneMap.Location = new Point(labelX, yPos + 3);
+            lblHDRToneMap.AutoSize = true;
+            tpHDR.Controls.Add(lblHDRToneMap);
+
+            cbHDRToneMapAlgorithm = new ComboBox();
+            cbHDRToneMapAlgorithm.DropDownStyle = ComboBoxStyle.DropDownList;
+            cbHDRToneMapAlgorithm.Location = new Point(controlX, yPos);
+            cbHDRToneMapAlgorithm.Size = new Size(controlWidth, 23);
+            cbHDRToneMapAlgorithm.Items.AddRange(Helpers.GetLocalizedEnumDescriptions<HDRToneMapAlgorithm>());
+            cbHDRToneMapAlgorithm.SelectedIndex = (int)TaskSettings.ImageSettings.HDRToneMapAlgorithm;
+            cbHDRToneMapAlgorithm.SelectedIndexChanged += cbHDRToneMapAlgorithm_SelectedIndexChanged;
+            tpHDR.Controls.Add(cbHDRToneMapAlgorithm);
+            yPos += rowHeight;
+
+            // EXR compression
+            lblHDREXRCompression = new Label();
+            lblHDREXRCompression.Text = "EXR compression:";
+            lblHDREXRCompression.Location = new Point(labelX, yPos + 3);
+            lblHDREXRCompression.AutoSize = true;
+            tpHDR.Controls.Add(lblHDREXRCompression);
+
+            cbHDREXRCompression = new ComboBox();
+            cbHDREXRCompression.DropDownStyle = ComboBoxStyle.DropDownList;
+            cbHDREXRCompression.Location = new Point(controlX, yPos);
+            cbHDREXRCompression.Size = new Size(controlWidth, 23);
+            cbHDREXRCompression.Items.AddRange(Helpers.GetLocalizedEnumDescriptions<EXRCompression>());
+            cbHDREXRCompression.SelectedIndex = (int)TaskSettings.ImageSettings.HDREXRCompression;
+            cbHDREXRCompression.SelectedIndexChanged += cbHDREXRCompression_SelectedIndexChanged;
+            tpHDR.Controls.Add(cbHDREXRCompression);
+            yPos += rowHeight;
+
+            // JPEG gain map checkbox
+            cbHDRJPEGGainMap = new CheckBox();
+            cbHDRJPEGGainMap.Text = "Save JPEG as Ultra HDR (gain map) when HDR data and the bundled codec are available";
+            cbHDRJPEGGainMap.Location = new Point(labelX, yPos);
+            cbHDRJPEGGainMap.AutoSize = true;
+            cbHDRJPEGGainMap.Checked = TaskSettings.ImageSettings.HDRJPEGGainMap;
+            cbHDRJPEGGainMap.CheckedChanged += cbHDRJPEGGainMap_CheckedChanged;
+            tpHDR.Controls.Add(cbHDRJPEGGainMap);
+            yPos += rowHeight + 10;
+
+            lblHDRCodecStatus = new Label();
+            lblHDRCodecStatus.Location = new Point(labelX, yPos + 3);
+            lblHDRCodecStatus.AutoSize = true;
+            tpHDR.Controls.Add(lblHDRCodecStatus);
+
+            UpdateHDRCodecStatus();
+
+            // Add HDR tab to tcImage tab control
+            tcImage.TabPages.Add(tpHDR);
+
+            UpdateHDRControlsEnabled();
+        }
+
+        private void UpdateHDRControlsEnabled()
+        {
+            bool enabled = cbHDRCaptureEnabled.Checked;
+            cbHDRAutoFallbackToSDR.Enabled = enabled;
+            cbHDRToneMapAlgorithm.Enabled = enabled;
+            cbHDREXRCompression.Enabled = enabled;
+            cbHDRJPEGGainMap.Enabled = enabled;
+            lblHDRToneMap.Enabled = enabled;
+            lblHDREXRCompression.Enabled = enabled;
+        }
+
+        private void cbHDRCaptureEnabled_CheckedChanged(object sender, EventArgs e)
+        {
+            TaskSettings.ImageSettings.HDRCaptureEnabled = cbHDRCaptureEnabled.Checked;
+            UpdateHDRControlsEnabled();
+        }
+
+        private void cbHDRAutoFallbackToSDR_CheckedChanged(object sender, EventArgs e)
+        {
+            TaskSettings.ImageSettings.HDRAutoFallbackToSDR = cbHDRAutoFallbackToSDR.Checked;
+        }
+
+        private void cbHDRToneMapAlgorithm_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            TaskSettings.ImageSettings.HDRToneMapAlgorithm = (HDRToneMapAlgorithm)cbHDRToneMapAlgorithm.SelectedIndex;
+        }
+
+        private void cbHDREXRCompression_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            TaskSettings.ImageSettings.HDREXRCompression = (EXRCompression)cbHDREXRCompression.SelectedIndex;
+        }
+
+        private void cbHDRJPEGGainMap_CheckedChanged(object sender, EventArgs e)
+        {
+            TaskSettings.ImageSettings.HDRJPEGGainMap = cbHDRJPEGGainMap.Checked;
+        }
+
+        private void UpdateHDRCodecStatus()
+        {
+            bool exists = UltraHdrJpegWriter.IsEncoderAvailable;
+            lblHDRCodecStatus.Text = UltraHdrJpegWriter.AvailabilityMessage;
+            lblHDRCodecStatus.ForeColor = exists ? Color.Green : Color.DarkOrange;
+        }
+
+        #endregion HDR
     }
 }

@@ -36,10 +36,42 @@ namespace ShareX
         public MemoryStream ImageStream { get; set; }
         public EImageFormat ImageFormat { get; set; }
 
+        /// <summary>
+        /// When set, the prepared image is backed by a temp HDR output file instead of ImageStream.
+        /// Write() and OpenReadStream() will read from this file until Dispose() cleans it up.
+        /// </summary>
+        public string HDRFilePath { get; set; }
+
+        public Stream OpenReadStream()
+        {
+            if (!string.IsNullOrEmpty(HDRFilePath) && File.Exists(HDRFilePath))
+            {
+                return new FileStream(HDRFilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            }
+
+            if (ImageStream != null)
+            {
+                if (ImageStream.CanSeek)
+                {
+                    ImageStream.Position = 0;
+                }
+
+                return new MemoryStream(ImageStream.ToArray(), writable: false);
+            }
+
+            return null;
+        }
+
         public bool Write(string filePath)
         {
             try
             {
+                if (!string.IsNullOrEmpty(HDRFilePath) && File.Exists(HDRFilePath))
+                {
+                    File.Copy(HDRFilePath, filePath, true);
+                    return true;
+                }
+
                 if (ImageStream != null && !string.IsNullOrEmpty(filePath))
                 {
                     return ImageStream.WriteToFile(filePath);
@@ -65,6 +97,15 @@ namespace ShareX
         public void Dispose()
         {
             ImageStream?.Dispose();
+
+            if (!string.IsNullOrEmpty(HDRFilePath) && File.Exists(HDRFilePath))
+            {
+                try
+                {
+                    File.Delete(HDRFilePath);
+                }
+                catch { }
+            }
         }
     }
 }

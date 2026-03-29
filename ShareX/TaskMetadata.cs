@@ -24,6 +24,7 @@
 #endregion License Information (GPL v3)
 
 using ShareX.HelpersLib;
+using ShareX.ScreenCaptureLib;
 using System;
 using System.Drawing;
 
@@ -34,6 +35,9 @@ namespace ShareX
         private const int WindowInfoMaxLength = 255;
 
         public Bitmap Image { get; set; }
+        public HDRCaptureResult HDRData { get; set; }
+        public HDRCaptureStatus HDRCaptureStatus { get; set; } = HDRCaptureStatus.Disabled;
+        public string HDRErrorMessage { get; set; }
 
         private string windowTitle;
 
@@ -84,6 +88,7 @@ namespace ShareX
         public void Dispose()
         {
             Image?.Dispose();
+            HDRData?.Dispose();
         }
     }
 }

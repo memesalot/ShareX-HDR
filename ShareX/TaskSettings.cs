@@ -347,6 +347,17 @@ namespace ShareX
 
         #endregion Image / General
 
+        #region Image / HDR
+
+        public bool HDRCaptureEnabled = false;
+        public bool HDRAutoFallbackToSDR = true;
+        public HDRToneMapAlgorithm HDRToneMapAlgorithm = HDRToneMapAlgorithm.ACES;
+        public EXRCompression HDREXRCompression = EXRCompression.ZIP;
+        public bool HDRJPEGGainMap = false;
+        public int HDRJPEGGainMapSDRQuality = 90;
+
+        #endregion Image / HDR
+
         #region Image / Effects
 
         public List<ImageEffectPreset> ImageEffectPresets = new List<ImageEffectPreset>() { ImageEffectPreset.GetDefaultPreset() };
@@ -390,6 +401,12 @@ namespace ShareX
         public RegionCaptureOptions SurfaceOptions = new RegionCaptureOptions();
 
         #endregion Capture / Region capture
+
+        #region Capture / HDR (Legacy compatibility)
+
+        public HdrifyOptions HdrifyOptions = new HdrifyOptions();
+
+        #endregion Capture / HDR
 
         #region Capture / Screen recorder
 
