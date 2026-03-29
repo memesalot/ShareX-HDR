@@ -73,7 +73,7 @@ namespace ShareX.ScreenCaptureLib
             {
                 try
                 {
-                    if (HDRScreenshot.IsAnyHDRAvailable())
+                    if (HDRScreenshot.IsHDRAvailable(rect))
                     {
                         using (HDRScreenshot hdrCapture = new HDRScreenshot())
                         {
@@ -92,7 +92,7 @@ namespace ShareX.ScreenCaptureLib
                     else
                     {
                         LastHDRCaptureStatus = HDRCaptureStatus.Unavailable;
-                        LastHDRCaptureError = "HDR capture is not available on any display.";
+                        LastHDRCaptureError = "HDR capture is not available for the selected region.";
                     }
                 }
                 catch (Exception e)

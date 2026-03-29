@@ -27,6 +27,7 @@ using ShareX.HelpersLib;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Imaging;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
@@ -42,7 +43,7 @@ namespace ShareX.ScreenCaptureLib
 
         private bool disposed;
 
-        private readonly record struct OutputCaptureTarget(uint AdapterIndex, uint OutputIndex, Rectangle Bounds);
+        private readonly record struct OutputCaptureTarget(uint AdapterIndex, uint OutputIndex, Rectangle Bounds, bool SupportsHDR);
 
         /// <summary>
         /// Captures a rectangle from the screen in HDR, stitching together all overlapping outputs.
@@ -64,6 +65,7 @@ namespace ShareX.ScreenCaptureLib
 
             HDRCaptureResult compositeResult = HDRCaptureResult.CreateEmpty(rect.Width, rect.Height);
             bool capturedAnyPixels = false;
+            bool capturedAnyHDRPixels = false;
 
             try
             {
@@ -76,7 +78,9 @@ namespace ShareX.ScreenCaptureLib
                         continue;
                     }
 
-                    using HDRCaptureResult capturedRegion = CaptureOutputRegion(factory, target, captureRect);
+                    using HDRCaptureResult capturedRegion = target.SupportsHDR
+                        ? CaptureOutputRegion(factory, target, captureRect)
+                        : CaptureOutputRegionSDR(captureRect);
 
                     if (capturedRegion == null)
                     {
@@ -86,11 +90,18 @@ namespace ShareX.ScreenCaptureLib
                     compositeResult.CopyRegionFrom(capturedRegion, new Rectangle(0, 0, capturedRegion.Width, capturedRegion.Height),
                         new Point(captureRect.X - rect.X, captureRect.Y - rect.Y));
                     capturedAnyPixels = true;
+                    capturedAnyHDRPixels |= target.SupportsHDR;
                 }
 
                 if (!capturedAnyPixels)
                 {
                     throw new InvalidOperationException("Capture rectangle does not intersect with any readable display output.");
+                }
+
+                if (!capturedAnyHDRPixels)
+                {
+                    compositeResult.Dispose();
+                    return null;
                 }
 
                 if (captureCursor)
@@ -122,6 +133,40 @@ namespace ShareX.ScreenCaptureLib
         {
             Rectangle bounds = CaptureHelpers.GetScreenBounds();
             return CaptureRectangleHDR(bounds, false);
+        }
+
+        public static bool IsHDRAvailable(Rectangle rect)
+        {
+            if (rect.Width <= 0 || rect.Height <= 0)
+            {
+                return false;
+            }
+
+            IDXGIFactory1 factory = null;
+
+            try
+            {
+                factory = CreateDXGIFactory1<IDXGIFactory1>();
+                List<OutputCaptureTarget> captureTargets = FindOutputsForRect(factory, rect);
+
+                foreach (OutputCaptureTarget target in captureTargets)
+                {
+                    if (target.SupportsHDR)
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                factory?.Dispose();
+            }
         }
 
         /// <summary>
@@ -381,7 +426,7 @@ namespace ShareX.ScreenCaptureLib
 
                             if (overlap.Width > 0 && overlap.Height > 0)
                             {
-                                captureTargets.Add(new OutputCaptureTarget(adapterIdx, outputIdx, outputBounds));
+                                captureTargets.Add(new OutputCaptureTarget(adapterIdx, outputIdx, outputBounds, SupportsHDR(output)));
                             }
                         }
                         finally
@@ -397,6 +442,40 @@ namespace ShareX.ScreenCaptureLib
             }
 
             return captureTargets;
+        }
+
+        private static bool SupportsHDR(IDXGIOutput output)
+        {
+            IDXGIOutput6 output6 = null;
+
+            try
+            {
+                output6 = output.QueryInterface<IDXGIOutput6>();
+                OutputDescription1 desc1 = output6.Description1;
+
+                return desc1.ColorSpace == ColorSpaceType.RgbFullG2084NoneP2020 ||
+                       desc1.ColorSpace == ColorSpaceType.RgbFullG10NoneP709;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                output6?.Dispose();
+            }
+        }
+
+        private static HDRCaptureResult CaptureOutputRegionSDR(Rectangle captureRect)
+        {
+            using Bitmap bitmap = CaptureRectangleNative(captureRect);
+
+            if (bitmap == null)
+            {
+                return null;
+            }
+
+            return ConvertBitmapCaptureToFloat(bitmap);
         }
 
         private static HDRCaptureResult CreateCaptureResult(Format format, int width, int height, MappedSubresource mapped)
@@ -463,6 +542,97 @@ namespace ShareX.ScreenCaptureLib
             }
 
             return result;
+        }
+
+        private static HDRCaptureResult ConvertBitmapCaptureToFloat(Bitmap bitmap)
+        {
+            Bitmap argbBitmap = EnsureArgbBitmap(bitmap, out bool disposeBitmap);
+
+            try
+            {
+                Rectangle bounds = new Rectangle(0, 0, argbBitmap.Width, argbBitmap.Height);
+                BitmapData bitmapData = argbBitmap.LockBits(bounds, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+
+                try
+                {
+                    byte[] pixelData = new byte[argbBitmap.Width * argbBitmap.Height * 4];
+                    int destinationStride = argbBitmap.Width * 4;
+
+                    unsafe
+                    {
+                        byte* sourcePointer = (byte*)bitmapData.Scan0;
+
+                        for (int y = 0; y < argbBitmap.Height; y++)
+                        {
+                            System.Runtime.InteropServices.Marshal.Copy(
+                                (IntPtr)(sourcePointer + y * bitmapData.Stride),
+                                pixelData,
+                                y * destinationStride,
+                                destinationStride);
+                        }
+                    }
+
+                    return ConvertLdrCaptureToFloat(pixelData, argbBitmap.Width, argbBitmap.Height, destinationStride, true);
+                }
+                finally
+                {
+                    argbBitmap.UnlockBits(bitmapData);
+                }
+            }
+            finally
+            {
+                if (disposeBitmap)
+                {
+                    argbBitmap.Dispose();
+                }
+            }
+        }
+
+        private static Bitmap EnsureArgbBitmap(Bitmap bitmap, out bool disposeBitmap)
+        {
+            if (bitmap.PixelFormat == PixelFormat.Format32bppArgb)
+            {
+                disposeBitmap = false;
+                return bitmap;
+            }
+
+            Bitmap argbBitmap = new Bitmap(bitmap.Width, bitmap.Height, PixelFormat.Format32bppArgb);
+
+            using (Graphics graphics = Graphics.FromImage(argbBitmap))
+            {
+                graphics.DrawImage(bitmap, 0, 0, bitmap.Width, bitmap.Height);
+            }
+
+            disposeBitmap = true;
+            return argbBitmap;
+        }
+
+        private static Bitmap CaptureRectangleNative(Rectangle rect)
+        {
+            if (rect.Width == 0 || rect.Height == 0)
+            {
+                return null;
+            }
+
+            IntPtr handle = NativeMethods.GetDesktopWindow();
+            IntPtr hdcSrc = NativeMethods.GetWindowDC(handle);
+            IntPtr hdcDest = NativeMethods.CreateCompatibleDC(hdcSrc);
+            IntPtr hBitmap = NativeMethods.CreateCompatibleBitmap(hdcSrc, rect.Width, rect.Height);
+            IntPtr hOld = NativeMethods.SelectObject(hdcDest, hBitmap);
+
+            try
+            {
+                NativeMethods.BitBlt(hdcDest, 0, 0, rect.Width, rect.Height, hdcSrc, rect.X, rect.Y,
+                    CopyPixelOperation.SourceCopy | CopyPixelOperation.CaptureBlt);
+                return Image.FromHbitmap(hBitmap);
+            }
+            finally
+            {
+                NativeMethods.SelectObject(hdcDest, hOld);
+                NativeMethods.DeleteDC(hdcDest);
+                NativeMethods.ReleaseDC(handle, hdcSrc);
+                NativeMethods.DeleteObject(hBitmap);
+            }
         }
 
         private static float SRGBToLinear(float srgb)

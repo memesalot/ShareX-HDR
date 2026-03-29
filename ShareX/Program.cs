@@ -49,6 +49,7 @@ namespace ShareX
     internal static class Program
     {
         public const string AppName = "ShareX";
+        public const string DisplayName = "ShareX-HDR";
         public const string MutexName = "82E6AC09-0FEF-4390-AD9F-0DD3F5561EFC";
         public static readonly string PipeName = $"{Environment.MachineName}-{Environment.UserName}-{AppName}";
 
@@ -84,7 +85,7 @@ namespace ShareX
         {
             get
             {
-                string title = $"{AppName} {VersionText}";
+                string title = $"{DisplayName} ({VersionText})";
 
                 if (Settings != null && Settings.DevMode)
                 {
@@ -111,7 +112,7 @@ namespace ShareX
                     return Title;
                 }
 
-                return AppName;
+                return DisplayName;
             }
         }
 
