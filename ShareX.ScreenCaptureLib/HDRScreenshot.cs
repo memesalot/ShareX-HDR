@@ -40,6 +40,7 @@ namespace ShareX.ScreenCaptureLib
     public class HDRScreenshot : IDisposable
     {
         private const int ACQUIRE_TIMEOUT_MS = 1000;
+        private const int WARMUP_FRAME_COUNT = 2;
 
         private bool disposed;
 
@@ -335,13 +336,16 @@ namespace ShareX.ScreenCaptureLib
                 };
                 duplication = output5.DuplicateOutput1(device, supportedFormats);
 
-                try
+                for (int i = 0; i < WARMUP_FRAME_COUNT; i++)
                 {
-                    duplication.AcquireNextFrame(ACQUIRE_TIMEOUT_MS, out OutduplFrameInfo _, out frameResource);
-                }
-                catch
-                {
-                    System.Threading.Thread.Sleep(100);
+                    try
+                    {
+                        duplication.AcquireNextFrame(ACQUIRE_TIMEOUT_MS, out OutduplFrameInfo _, out IDXGIResource warmupFrame);
+                        warmupFrame?.Dispose();
+                    }
+                    catch
+                    {
+                    }
 
                     try
                     {
@@ -350,9 +354,9 @@ namespace ShareX.ScreenCaptureLib
                     catch
                     {
                     }
-
-                    duplication.AcquireNextFrame(ACQUIRE_TIMEOUT_MS, out OutduplFrameInfo _, out frameResource);
                 }
+
+                duplication.AcquireNextFrame(ACQUIRE_TIMEOUT_MS, out OutduplFrameInfo _, out frameResource);
 
                 using ID3D11Texture2D frameTexture = frameResource.QueryInterface<ID3D11Texture2D>();
                 Texture2DDescription frameDesc = frameTexture.Description;
