@@ -110,13 +110,19 @@ namespace ShareX
 
                     if (!captureRect.IsEmpty)
                     {
-                        Screenshot regionScreenshot = TaskHelpers.GetScreenshot(taskSettings);
-                        Bitmap hdrResult = regionScreenshot.CaptureRectangle(captureRect);
+                        // Use the pre-captured canvas for the SDR bitmap instead of
+                        // re-capturing after the overlay closes. Re-capturing can miss
+                        // hardware-accelerated video that hasn't been repainted yet.
+                        Bitmap result = form.GetResultImage();
 
-                        if (hdrResult != null)
+                        if (result != null)
                         {
-                            metadata = new TaskMetadata(hdrResult);
-                            TaskHelpers.TransferHDRData(regionScreenshot, metadata);
+                            metadata = new TaskMetadata(result);
+
+                            // Capture only HDR data separately via DXGI DDA.
+                            Screenshot hdrScreenshot = TaskHelpers.GetScreenshot(taskSettings);
+                            hdrScreenshot.CaptureHDRData(captureRect);
+                            TaskHelpers.TransferHDRData(hdrScreenshot, metadata);
                         }
                     }
                 }
@@ -132,10 +138,7 @@ namespace ShareX
                     }
                 }
 
-                if (!ReferenceEquals(metadata?.HDRData, previewScreenshot.LastHDRCaptureResult))
-                {
-                    previewScreenshot.LastHDRCaptureResult?.Dispose();
-                }
+                previewScreenshot.LastHDRCaptureResult?.Dispose();
 
                 if (metadata != null)
                 {

@@ -167,7 +167,7 @@ namespace ShareX.ScreenCaptureLib
                         // HDR support: use 10-bit format for HDR capture
                         if (FFmpeg.HDR)
                         {
-                            args.Append("output_fmt=p010le:"); // 10-bit YUV 4:2:0 for HDR
+                            args.Append("output_fmt=p010le"); // 10-bit YUV 4:2:0 for HDR
                         }
                         else
                         {

@@ -524,6 +524,69 @@ namespace ShareX.ScreenCaptureLib
             return (byte)Math.Clamp((int)(value * 255.0f + 0.5f), 0, 255);
         }
 
+        /// <summary>
+        /// Fills black regions in the HDR capture with data from a GDI (BitBlt) capture.
+        /// DXGI Desktop Duplication cannot capture hardware video overlays (e.g. browser
+        /// hardware-accelerated video), so those areas appear as black. The GDI capture
+        /// with CaptureBlt CAN capture these overlays. This method detects black pixels
+        /// in the HDR data that have visible content in the GDI capture and fills them
+        /// with the GDI data converted to linear space.
+        /// </summary>
+        public void FillFromGDICapture(Bitmap sdrBitmap)
+        {
+            if (sdrBitmap == null || PixelData == null || sdrBitmap.Width != Width || sdrBitmap.Height != Height)
+            {
+                return;
+            }
+
+            BitmapData bmpData = sdrBitmap.LockBits(
+                new Rectangle(0, 0, Width, Height),
+                ImageLockMode.ReadOnly,
+                System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+
+            try
+            {
+                const float blackThreshold = 0.001f;
+
+                unsafe
+                {
+                    byte* sdrBase = (byte*)bmpData.Scan0;
+
+                    for (int y = 0; y < Height; y++)
+                    {
+                        byte* sdrRow = sdrBase + y * bmpData.Stride;
+
+                        for (int x = 0; x < Width; x++)
+                        {
+                            ReadPixel(x, y, out float r, out float g, out float b, out float a);
+
+                            if (r >= blackThreshold || g >= blackThreshold || b >= blackThreshold)
+                            {
+                                continue;
+                            }
+
+                            int sdrOffset = x * 4;
+                            byte sdrB = sdrRow[sdrOffset];
+                            byte sdrG = sdrRow[sdrOffset + 1];
+                            byte sdrR = sdrRow[sdrOffset + 2];
+
+                            if (sdrR > 0 || sdrG > 0 || sdrB > 0)
+                            {
+                                float linR = SRGBToLinear(sdrR / 255.0f);
+                                float linG = SRGBToLinear(sdrG / 255.0f);
+                                float linB = SRGBToLinear(sdrB / 255.0f);
+                                WritePixel(x, y, linR, linG, linB, 1.0f);
+                            }
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                sdrBitmap.UnlockBits(bmpData);
+            }
+        }
+
         public void Dispose()
         {
             if (!disposed)

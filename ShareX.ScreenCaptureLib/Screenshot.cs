@@ -85,6 +85,11 @@ namespace ShareX.ScreenCaptureLib
 
                         if (LastHDRCaptureResult != null)
                         {
+                            if (preview != null)
+                            {
+                                LastHDRCaptureResult.FillFromGDICapture(preview);
+                            }
+
                             LastHDRCaptureStatus = HDRCaptureStatus.Succeeded;
                             return preview;
                         }
@@ -108,6 +113,70 @@ namespace ShareX.ScreenCaptureLib
             }
 
             return preview;
+        }
+
+        /// <summary>
+        /// Captures only HDR data for the given rectangle without producing a new SDR bitmap.
+        /// Used by region capture where the SDR image comes from the pre-captured canvas.
+        /// A temporary GDI capture is taken to fill hardware overlay areas that DXGI DDA misses.
+        /// </summary>
+        public void CaptureHDRData(Rectangle rect)
+        {
+            if (RemoveOutsideScreenArea)
+            {
+                Rectangle bounds = CaptureHelpers.GetScreenBounds();
+                rect = Rectangle.Intersect(bounds, rect);
+            }
+
+            LastHDRCaptureResult?.Dispose();
+            LastHDRCaptureResult = null;
+            LastHDRCaptureError = null;
+            LastHDRCaptureStatus = HDRCaptureStatus.Disabled;
+
+            if (!CaptureHDR)
+            {
+                return;
+            }
+
+            try
+            {
+                if (HDRScreenshot.IsHDRAvailable(rect))
+                {
+                    using (HDRScreenshot hdrCapture = new HDRScreenshot())
+                    {
+                        LastHDRCaptureResult = hdrCapture.CaptureRectangleHDR(rect, CaptureCursor);
+                    }
+
+                    if (LastHDRCaptureResult != null)
+                    {
+                        using (Bitmap gdiFallback = CaptureRectangleNative(rect, false))
+                        {
+                            if (gdiFallback != null)
+                            {
+                                LastHDRCaptureResult.FillFromGDICapture(gdiFallback);
+                            }
+                        }
+
+                        LastHDRCaptureStatus = HDRCaptureStatus.Succeeded;
+                        return;
+                    }
+
+                    LastHDRCaptureStatus = HDRCaptureStatus.Failed;
+                    LastHDRCaptureError = "HDR capture did not return any pixel data.";
+                }
+                else
+                {
+                    LastHDRCaptureStatus = HDRCaptureStatus.Unavailable;
+                    LastHDRCaptureError = "HDR capture is not available for the selected region.";
+                }
+            }
+            catch (Exception e)
+            {
+                DebugHelper.WriteException(e, "HDR capture failed, falling back to SDR.");
+                LastHDRCaptureStatus = HDRCaptureStatus.Failed;
+                LastHDRCaptureError = e.Message;
+                LastHDRCaptureResult = null;
+            }
         }
 
         public Bitmap CaptureFullscreen()

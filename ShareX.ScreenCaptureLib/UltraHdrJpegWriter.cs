@@ -87,7 +87,7 @@ namespace ShareX.ScreenCaptureLib
                     Plane0 = hdrHandle.AddrOfPinnedObject(),
                     Plane1 = IntPtr.Zero,
                     Plane2 = IntPtr.Zero,
-                    Stride0 = (uint)hdrData.Width,
+                    Stride0 = (uint)(hdrData.Width * 8), // 8 bytes per pixel for RGBA half-float
                     Stride1 = 0,
                     Stride2 = 0
                 };
@@ -103,7 +103,7 @@ namespace ShareX.ScreenCaptureLib
                     Plane0 = sdrHandle.AddrOfPinnedObject(),
                     Plane1 = IntPtr.Zero,
                     Plane2 = IntPtr.Zero,
-                    Stride0 = (uint)hdrData.Width,
+                    Stride0 = (uint)(hdrData.Width * 4), // 4 bytes per pixel for RGBA 8888
                     Stride1 = 0,
                     Stride2 = 0
                 };
