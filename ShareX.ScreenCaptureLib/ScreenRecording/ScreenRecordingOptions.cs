@@ -28,14 +28,17 @@ using System;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
-using System.Linq;
 using System.Text;
 using System.Windows.Forms;
+using Vortice.DXGI;
+using static Vortice.DXGI.DXGI;
 
 namespace ShareX.ScreenCaptureLib
 {
     public class ScreenRecordingOptions
     {
+        private readonly record struct DdagrabCaptureTarget(int OutputIndex, Rectangle RelativeBounds);
+
         public bool IsRecording { get; set; }
         public bool IsLossless { get; set; }
         public string InputPath { get; set; }
@@ -44,6 +47,7 @@ namespace ShareX.ScreenCaptureLib
         public Rectangle CaptureArea { get; set; }
         public float Duration { get; set; }
         public bool DrawCursor { get; set; }
+        public bool AllowHDRAutoFallback { get; set; } = true;
         public FFmpegOptions FFmpeg { get; set; } = new FFmpegOptions();
 
         public string GetFFmpegCommands()
@@ -129,59 +133,48 @@ namespace ShareX.ScreenCaptureLib
                             args.Append($"-i audio={Helpers.EscapeCLIText(FFmpeg.AudioSource)} ");
                         }
 
-                        Screen[] screens = Screen.AllScreens.OrderBy(x => !x.Primary).ToArray();
-                        int monitorIndex = 0;
-                        Rectangle captureArea = screens[0].Bounds;
-                        int maxIntersectionArea = 0;
-
-                        for (int i = 0; i < screens.Length; i++)
-                        {
-                            Screen screen = screens[i];
-                            Rectangle intersection = Rectangle.Intersect(screen.Bounds, CaptureArea);
-                            int intersectionArea = intersection.Width * intersection.Height;
-
-                            if (intersectionArea > maxIntersectionArea)
-                            {
-                                maxIntersectionArea = intersectionArea;
-
-                                monitorIndex = i;
-                                captureArea = new Rectangle(intersection.X - screen.Bounds.X, intersection.Y - screen.Bounds.Y, intersection.Width, intersection.Height);
-                            }
-                        }
+                        bool useHDREncoding = ShouldUseHDREncoding();
+                        DdagrabCaptureTarget captureTarget = ResolveDDAGrabCaptureTarget(CaptureArea);
+                        Rectangle captureArea = captureTarget.RelativeBounds;
 
                         if (FFmpeg.IsEvenSizeRequired)
                         {
                             captureArea = CaptureHelpers.EvenRectangleSize(captureArea);
                         }
 
+                        if (captureArea.Width <= 0 || captureArea.Height <= 0)
+                        {
+                            throw new InvalidOperationException("The selected recording region is too small for the current encoder settings.");
+                        }
+
                         // https://ffmpeg.org/ffmpeg-filters.html#ddagrab
                         AppendInputDevice(args, "lavfi", false);
                         args.Append("-i ddagrab=");
-                        args.Append($"output_idx={monitorIndex}:"); // DXGI Output Index to capture.
+                        args.Append($"output_idx={captureTarget.OutputIndex}:"); // DXGI Output Index to capture.
                         args.Append($"draw_mouse={DrawCursor.ToString().ToLowerInvariant()}:"); // Whether to draw the mouse cursor.
                         args.Append($"framerate={framerate}:"); // Framerate at which the desktop will be captured.
                         args.Append($"offset_x={captureArea.X}:"); // Horizontal offset of the captured video.
                         args.Append($"offset_y={captureArea.Y}:"); // Vertical offset of the captured video.
                         args.Append($"video_size={captureArea.Width}x{captureArea.Height}:"); // Specify the size of the captured video.
 
-                        // HDR support: use 10-bit format for HDR capture
-                        if (FFmpeg.HDR)
+                        if (useHDREncoding)
                         {
-                            args.Append("output_fmt=p010le"); // 10-bit YUV 4:2:0 for HDR
+                            args.Append($"allow_fallback={AllowHDRAutoFallback.ToString().ToLowerInvariant()}:");
+                            args.Append("output_fmt=10bit"); // Valid ddagrab HDR format.
                         }
                         else
                         {
                             args.Append("output_fmt=bgra"); // Desired filter output format.
                         }
 
-                        if (!FFmpeg.HDR && FFmpeg.VideoCodec != FFmpegVideoCodec.h264_nvenc && FFmpeg.VideoCodec != FFmpegVideoCodec.hevc_nvenc)
+                        if (!useHDREncoding && FFmpeg.VideoCodec != FFmpegVideoCodec.h264_nvenc && FFmpeg.VideoCodec != FFmpegVideoCodec.hevc_nvenc)
                         {
                             args.Append(",hwdownload");
                             args.Append(",format=bgra");
                         }
-                        else if (FFmpeg.HDR)
+                        else if (useHDREncoding)
                         {
-                            // For HDR, we need hwdownload with p010le format
+                            // Download 10-bit frames to a software format accepted by CPU and hardware encoders.
                             args.Append(",hwdownload");
                             args.Append(",format=p010le");
                         }
@@ -223,7 +216,7 @@ namespace ShareX.ScreenCaptureLib
 
             if (FFmpeg.IsVideoSourceSelected)
             {
-                bool useHDREncoding = FFmpeg.HDR;
+                bool useHDREncoding = ShouldUseHDREncoding();
 
                 if (useHDREncoding)
                 {
@@ -371,7 +364,7 @@ namespace ShareX.ScreenCaptureLib
             // HDR metadata (Mastering Display and Content Light Level)
             // Using typical values for a 1000-nit display
             string masteringDisplay = "G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,1)";
-            string contentLightLevel = "maxCLL=1000,maxFALL=400";
+            string contentLightLevel = "1000,400";
 
             switch (FFmpeg.HDRVideoCodec)
             {
@@ -384,9 +377,7 @@ namespace ShareX.ScreenCaptureLib
                     args.Append($"-color_primaries {colorPrimaries} ");
                     args.Append($"-color_trc {colorTrc} ");
                     args.Append($"-colorspace {colorspace} ");
-                    args.Append("-hdr10 1 "); // Enable HDR10 metadata
-                    args.Append($"-master_display \"{masteringDisplay}\" ");
-                    args.Append($"-max_cll \"{contentLightLevel}\" ");
+                    args.Append($"-x265-params \"hdr10=1:repeat-headers=1:colorprim={colorPrimaries}:transfer={colorTrc}:colormatrix={colorspace}:master-display={masteringDisplay}:max-cll={contentLightLevel}\" ");
                     args.Append("-tag:v hvc1 ");
                     args.Append("-movflags +faststart ");
                     break;
@@ -402,8 +393,6 @@ namespace ShareX.ScreenCaptureLib
                     args.Append($"-color_primaries {colorPrimaries} ");
                     args.Append($"-color_trc {colorTrc} ");
                     args.Append($"-colorspace {colorspace} ");
-                    args.Append($"-master_display \"{masteringDisplay}\" ");
-                    args.Append($"-max_cll \"{contentLightLevel}\" ");
                     args.Append("-tag:v hvc1 ");
                     args.Append("-movflags +faststart ");
                     break;
@@ -443,6 +432,7 @@ namespace ShareX.ScreenCaptureLib
                     args.Append($"-color_primaries {colorPrimaries} ");
                     args.Append("-color_trc arib-std-b67 "); // HLG
                     args.Append($"-colorspace {colorspace} ");
+                    args.Append($"-x265-params \"repeat-headers=1:colorprim={colorPrimaries}:transfer=arib-std-b67:colormatrix={colorspace}\" ");
                     args.Append("-tag:v hvc1 ");
                     args.Append("-movflags +faststart ");
                     break;
@@ -462,6 +452,92 @@ namespace ShareX.ScreenCaptureLib
                     args.Append("-movflags +faststart ");
                     break;
             }
+        }
+
+        private bool ShouldUseHDREncoding()
+        {
+            if (!FFmpeg.HDR || !FFmpeg.IsVideoSourceSelected)
+            {
+                return false;
+            }
+
+            if (!IsRecording || FFmpeg.VideoSource.Equals(FFmpegCaptureDevice.DDAGrab.Value, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (!AllowHDRAutoFallback)
+            {
+                throw new InvalidOperationException("HDR screen recording requires the DDAGrab video source.");
+            }
+
+            DebugHelper.WriteLine("HDR recording requested with a non-DDAGrab source. Falling back to SDR recording.");
+            return false;
+        }
+
+        private static DdagrabCaptureTarget ResolveDDAGrabCaptureTarget(Rectangle captureArea)
+        {
+            if (captureArea.Width <= 0 || captureArea.Height <= 0)
+            {
+                throw new InvalidOperationException("The selected recording region is empty.");
+            }
+
+            using IDXGIFactory1 factory = CreateDXGIFactory1<IDXGIFactory1>();
+            int globalOutputIndex = 0;
+            bool intersectsAnyOutput = false;
+
+            for (uint adapterIndex = 0; factory.EnumAdapters1(adapterIndex, out IDXGIAdapter1 adapter).Success; adapterIndex++)
+            {
+                try
+                {
+                    for (uint outputIndex = 0; adapter.EnumOutputs(outputIndex, out IDXGIOutput output).Success; outputIndex++)
+                    {
+                        try
+                        {
+                            OutputDescription description = output.Description;
+                            Rectangle outputBounds = new Rectangle(
+                                description.DesktopCoordinates.Left,
+                                description.DesktopCoordinates.Top,
+                                description.DesktopCoordinates.Right - description.DesktopCoordinates.Left,
+                                description.DesktopCoordinates.Bottom - description.DesktopCoordinates.Top);
+
+                            Rectangle overlap = Rectangle.Intersect(outputBounds, captureArea);
+
+                            if (overlap.Width > 0 && overlap.Height > 0)
+                            {
+                                intersectsAnyOutput = true;
+                            }
+
+                            if (outputBounds.Contains(captureArea))
+                            {
+                                Rectangle relativeBounds = new Rectangle(
+                                    captureArea.X - outputBounds.X,
+                                    captureArea.Y - outputBounds.Y,
+                                    captureArea.Width,
+                                    captureArea.Height);
+                                return new DdagrabCaptureTarget(globalOutputIndex, relativeBounds);
+                            }
+
+                            globalOutputIndex++;
+                        }
+                        finally
+                        {
+                            output.Dispose();
+                        }
+                    }
+                }
+                finally
+                {
+                    adapter.Dispose();
+                }
+            }
+
+            if (intersectsAnyOutput)
+            {
+                throw new InvalidOperationException("DDAGrab can only record a region fully contained within a single monitor.");
+            }
+
+            throw new InvalidOperationException("The selected recording region does not intersect any active display output.");
         }
 
         private void AppendInputDevice(StringBuilder args, string inputDevice, bool audioSource)

@@ -88,10 +88,25 @@ namespace ShareX.ScreenCaptureLib
                         continue;
                     }
 
+                    if (target.SupportsHDR && !capturedRegion.HasTrueHDRData)
+                    {
+                        using HDRCaptureResult sdrFallbackRegion = CaptureOutputRegionSDR(captureRect);
+
+                        if (sdrFallbackRegion == null)
+                        {
+                            continue;
+                        }
+
+                        compositeResult.CopyRegionFrom(sdrFallbackRegion, new Rectangle(0, 0, sdrFallbackRegion.Width, sdrFallbackRegion.Height),
+                            new Point(captureRect.X - rect.X, captureRect.Y - rect.Y));
+                        capturedAnyPixels = true;
+                        continue;
+                    }
+
                     compositeResult.CopyRegionFrom(capturedRegion, new Rectangle(0, 0, capturedRegion.Width, capturedRegion.Height),
                         new Point(captureRect.X - rect.X, captureRect.Y - rect.Y));
                     capturedAnyPixels = true;
-                    capturedAnyHDRPixels |= target.SupportsHDR;
+                    capturedAnyHDRPixels |= capturedRegion.HasTrueHDRData;
                 }
 
                 if (!capturedAnyPixels)
@@ -258,9 +273,8 @@ namespace ShareX.ScreenCaptureLib
                         {
                             try
                             {
-                                IDXGIOutput6 output6 = output.QueryInterface<IDXGIOutput6>();
+                                using IDXGIOutput6 output6 = output.QueryInterface<IDXGIOutput6>();
                                 OutputDescription1 desc1 = output6.Description1;
-                                output6.Dispose();
 
                                 if (desc1.ColorSpace == ColorSpaceType.RgbFullG2084NoneP2020 ||
                                     desc1.ColorSpace == ColorSpaceType.RgbFullG10NoneP709)
@@ -304,6 +318,9 @@ namespace ShareX.ScreenCaptureLib
             ID3D11DeviceContext context = null;
             IDXGIOutputDuplication duplication = null;
             IDXGIResource frameResource = null;
+            ID3D11Texture2D stagingTexture = null;
+            bool frameAcquired = false;
+            bool stagingMapped = false;
 
             try
             {
@@ -357,6 +374,7 @@ namespace ShareX.ScreenCaptureLib
                 }
 
                 duplication.AcquireNextFrame(ACQUIRE_TIMEOUT_MS, out OutduplFrameInfo _, out frameResource);
+                frameAcquired = true;
 
                 using ID3D11Texture2D frameTexture = frameResource.QueryInterface<ID3D11Texture2D>();
                 Texture2DDescription frameDesc = frameTexture.Description;
@@ -377,26 +395,36 @@ namespace ShareX.ScreenCaptureLib
                     MiscFlags = ResourceOptionFlags.None
                 };
 
-                using ID3D11Texture2D stagingTexture = device.CreateTexture2D(stagingDesc);
+                stagingTexture = device.CreateTexture2D(stagingDesc);
                 context.CopySubresourceRegion(
                     stagingTexture, 0, 0, 0, 0,
                     frameTexture, 0,
                     new Box(relativeX, relativeY, 0, relativeX + captureRect.Width, relativeY + captureRect.Height, 1));
 
                 MappedSubresource mapped = context.Map(stagingTexture, 0, MapMode.Read);
-
-                try
-                {
-                    return CreateCaptureResult(frameDesc.Format, captureRect.Width, captureRect.Height, mapped);
-                }
-                finally
-                {
-                    context.Unmap(stagingTexture, 0);
-                    duplication.ReleaseFrame();
-                }
+                stagingMapped = true;
+                return CreateCaptureResult(frameDesc.Format, captureRect.Width, captureRect.Height, mapped);
             }
             finally
             {
+                if (stagingMapped)
+                {
+                    context.Unmap(stagingTexture, 0);
+                }
+
+                stagingTexture?.Dispose();
+
+                if (frameAcquired)
+                {
+                    try
+                    {
+                        duplication?.ReleaseFrame();
+                    }
+                    catch
+                    {
+                    }
+                }
+
                 frameResource?.Dispose();
                 duplication?.Dispose();
                 output5?.Dispose();
@@ -511,7 +539,8 @@ namespace ShareX.ScreenCaptureLib
                     Width = width,
                     Height = height,
                     PixelFormat = HDRPixelFormat.R16G16B16A16_Float,
-                    Stride = destinationStride
+                    Stride = destinationStride,
+                    HasTrueHDRData = true
                 },
                 Format.R10G10B10A2_UNorm => new HDRCaptureResult
                 {
@@ -519,7 +548,8 @@ namespace ShareX.ScreenCaptureLib
                     Width = width,
                     Height = height,
                     PixelFormat = HDRPixelFormat.R10G10B10A2_UNorm,
-                    Stride = destinationStride
+                    Stride = destinationStride,
+                    HasTrueHDRData = true
                 },
                 Format.B8G8R8A8_UNorm => ConvertLdrCaptureToFloat(pixelData, width, height, destinationStride, true),
                 _ => ConvertLdrCaptureToFloat(pixelData, width, height, destinationStride, false)

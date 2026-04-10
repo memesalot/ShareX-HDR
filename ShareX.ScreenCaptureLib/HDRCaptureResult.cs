@@ -50,6 +50,7 @@ namespace ShareX.ScreenCaptureLib
         public int Height { get; set; }
         public HDRPixelFormat PixelFormat { get; set; }
         public int Stride { get; set; }
+        public bool HasTrueHDRData { get; set; }
 
         private bool disposed;
 
@@ -63,7 +64,8 @@ namespace ShareX.ScreenCaptureLib
                 Height = height,
                 PixelFormat = pixelFormat,
                 Stride = stride,
-                PixelData = new byte[Math.Max(height, 0) * Math.Max(stride, 0)]
+                PixelData = new byte[Math.Max(height, 0) * Math.Max(stride, 0)],
+                HasTrueHDRData = false
             };
         }
 
@@ -143,6 +145,7 @@ namespace ShareX.ScreenCaptureLib
                     Buffer.BlockCopy(source.PixelData, sourceRowOffset, PixelData, destinationRowOffset, copyLength);
                 }
 
+                HasTrueHDRData |= source.HasTrueHDRData;
                 return;
             }
 
@@ -154,6 +157,8 @@ namespace ShareX.ScreenCaptureLib
                     WritePixel(clippedDestinationRect.X + x, clippedDestinationRect.Y + y, r, g, b, a);
                 }
             }
+
+            HasTrueHDRData |= source.HasTrueHDRData;
         }
 
         public void CompositeCursor(CursorData cursorData, Rectangle captureBounds)

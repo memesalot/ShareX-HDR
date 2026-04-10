@@ -459,8 +459,9 @@ namespace ShareX
                 switch (format)
                 {
                     case EImageFormat.EXR:
+                        taskSettings.ImageSettings.HDREXRCompression = EXRCompression.None;
                         EXRWriter.Write(tempOutputPath, hdrData.PixelData, hdrData.Width, hdrData.Height, hdrData.Stride, hdrData.PixelFormat,
-                            taskSettings.ImageSettings.HDREXRCompression);
+                            EXRCompression.None);
                         success = File.Exists(tempOutputPath) && new FileInfo(tempOutputPath).Length > 0;
                         break;
                     case EImageFormat.HDR:

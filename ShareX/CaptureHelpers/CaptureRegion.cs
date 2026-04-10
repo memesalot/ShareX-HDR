@@ -123,6 +123,13 @@ namespace ShareX
                             Screenshot hdrScreenshot = TaskHelpers.GetScreenshot(taskSettings);
                             hdrScreenshot.CaptureHDRData(captureRect);
                             TaskHelpers.TransferHDRData(hdrScreenshot, metadata);
+
+                            if (metadata.HDRData != null && TaskHelpers.RequiresHDRSource(taskSettings.ImageSettings.ImageFormat, taskSettings))
+                            {
+                                Bitmap syncedPreview = metadata.HDRData.ToSDRBitmap(taskSettings.ImageSettings.HDRToneMapAlgorithm);
+                                metadata.Image.Dispose();
+                                metadata.Image = syncedPreview;
+                            }
                         }
                     }
                 }

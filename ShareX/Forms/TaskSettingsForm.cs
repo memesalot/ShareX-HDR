@@ -1333,7 +1333,8 @@ namespace ShareX
                 Duration = TaskSettings.CaptureSettings.ScreenRecordFixedDuration ? TaskSettings.CaptureSettings.ScreenRecordDuration : 0,
                 OutputPath = "output.mp4",
                 CaptureArea = Screen.PrimaryScreen.Bounds,
-                DrawCursor = TaskSettings.CaptureSettings.ScreenRecordShowCursor
+                DrawCursor = TaskSettings.CaptureSettings.ScreenRecordShowCursor,
+                AllowHDRAutoFallback = TaskSettings.CaptureSettings.ScreenRecordHDRAutoFallback
             };
 
             using (FFmpegOptionsForm form = new FFmpegOptionsForm(options))
@@ -2000,8 +2001,9 @@ namespace ShareX
             cbHDREXRCompression.DropDownStyle = ComboBoxStyle.DropDownList;
             cbHDREXRCompression.Location = new Point(controlX, yPos);
             cbHDREXRCompression.Size = new Size(controlWidth, 23);
-            cbHDREXRCompression.Items.AddRange(Helpers.GetLocalizedEnumDescriptions<EXRCompression>());
-            cbHDREXRCompression.SelectedIndex = (int)TaskSettings.ImageSettings.HDREXRCompression;
+            cbHDREXRCompression.Items.Add(Helpers.GetLocalizedEnumDescriptions<EXRCompression>().First());
+            TaskSettings.ImageSettings.HDREXRCompression = EXRCompression.None;
+            cbHDREXRCompression.SelectedIndex = 0;
             cbHDREXRCompression.SelectedIndexChanged += cbHDREXRCompression_SelectedIndexChanged;
             tpHDR.Controls.Add(cbHDREXRCompression);
             yPos += rowHeight;

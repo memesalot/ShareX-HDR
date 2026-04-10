@@ -89,8 +89,28 @@ namespace ShareX
                 taskSettings.CaptureSettings.FFmpegOptions.VideoCodec = FFmpegVideoCodec.gif;
             }
 
-            bool useHDRGIFCapture = outputType == ScreenRecordOutput.GIF && taskSettings.CaptureSettings.ScreenRecordHDREnabled;
+            bool hdrRecordingRequested = taskSettings.CaptureSettings.ScreenRecordHDREnabled;
+            bool useHDRGIFCapture = outputType == ScreenRecordOutput.GIF && hdrRecordingRequested;
+            bool useHDRFFmpegCapture = outputType != ScreenRecordOutput.GIF && hdrRecordingRequested;
+            bool useHDRCapturePipeline = useHDRGIFCapture || useHDRFFmpegCapture;
             bool useTwoPassEncoding = taskSettings.CaptureSettings.ScreenRecordTwoPassEncoding;
+
+            if (useHDRFFmpegCapture &&
+                !taskSettings.CaptureSettings.FFmpegOptions.VideoSource.Equals(FFmpegCaptureDevice.DDAGrab.Value, StringComparison.OrdinalIgnoreCase))
+            {
+                if (!taskSettings.CaptureSettings.ScreenRecordHDRAutoFallback)
+                {
+                    MessageBox.Show("HDR screen recording requires the DDAGrab video source.",
+                        "ShareX - " + Resources.FFmpeg_FFmpeg_error, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                DebugHelper.WriteLine("HDR screen recording requested with a non-DDAGrab source. Falling back to SDR recording.");
+                useHDRFFmpegCapture = false;
+                useHDRCapturePipeline = useHDRGIFCapture;
+            }
+
+            taskSettings.CaptureSettings.FFmpegOptions.HDR = useHDRCapturePipeline;
 
             if (taskSettings.CaptureSettings.FFmpegOptions.IsAnimatedImage && !useHDRGIFCapture)
             {
@@ -276,9 +296,9 @@ namespace ShareX
 
                             captureRectangle = recordForm.RecordingRegion;
 
-                            // Sync HDR settings from TaskSettingsCapture to FFmpegOptions
-                            taskSettings.CaptureSettings.FFmpegOptions.HDR = taskSettings.CaptureSettings.ScreenRecordHDREnabled;
-                            if (taskSettings.CaptureSettings.ScreenRecordHDREnabled)
+                            // Sync HDR settings from TaskSettingsCapture to FFmpegOptions.
+                            taskSettings.CaptureSettings.FFmpegOptions.HDR = useHDRCapturePipeline;
+                            if (useHDRFFmpegCapture)
                             {
                                 taskSettings.CaptureSettings.FFmpegOptions.HDRVideoCodec = taskSettings.CaptureSettings.ScreenRecordHDRCodec;
                                 taskSettings.CaptureSettings.FFmpegOptions.HDRTransferFunction = taskSettings.CaptureSettings.ScreenRecordHDRTransferFunction;
@@ -295,7 +315,8 @@ namespace ShareX
                                 Duration = duration,
                                 OutputPath = useHDRGIFCapture ? FileHelpers.AppendTextToFileName(path, $"-segment-{gifSegmentIndex++}") : path,
                                 CaptureArea = captureRectangle,
-                                DrawCursor = taskSettings.CaptureSettings.ScreenRecordShowCursor
+                                DrawCursor = taskSettings.CaptureSettings.ScreenRecordShowCursor,
+                                AllowHDRAutoFallback = taskSettings.CaptureSettings.ScreenRecordHDRAutoFallback
                             };
 
                             if (useHDRGIFCapture)

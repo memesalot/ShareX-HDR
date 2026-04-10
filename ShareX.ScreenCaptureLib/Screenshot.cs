@@ -108,6 +108,7 @@ namespace ShareX.ScreenCaptureLib
                     DebugHelper.WriteException(e, "HDR capture failed, falling back to SDR.");
                     LastHDRCaptureStatus = HDRCaptureStatus.Failed;
                     LastHDRCaptureError = e.Message;
+                    LastHDRCaptureResult?.Dispose();
                     LastHDRCaptureResult = null;
                 }
             }
@@ -175,6 +176,7 @@ namespace ShareX.ScreenCaptureLib
                 DebugHelper.WriteException(e, "HDR capture failed, falling back to SDR.");
                 LastHDRCaptureStatus = HDRCaptureStatus.Failed;
                 LastHDRCaptureError = e.Message;
+                LastHDRCaptureResult?.Dispose();
                 LastHDRCaptureResult = null;
             }
         }

@@ -352,7 +352,7 @@ namespace ShareX
         public bool HDRCaptureEnabled = false;
         public bool HDRAutoFallbackToSDR = true;
         public HDRToneMapAlgorithm HDRToneMapAlgorithm = HDRToneMapAlgorithm.ACES;
-        public EXRCompression HDREXRCompression = EXRCompression.ZIP;
+        public EXRCompression HDREXRCompression = EXRCompression.None;
         public bool HDRJPEGGainMap = false;
         public int HDRJPEGGainMapSDRQuality = 90;
 

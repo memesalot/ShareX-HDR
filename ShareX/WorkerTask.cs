@@ -586,7 +586,7 @@ namespace ShareX
             if (Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.BeautifyImage))
             {
                 Image = TaskHelpers.BeautifyImage(Image, Info.TaskSettings);
-                ClearHDRData();
+                ClearHDRData("HDR capture data was discarded because Beautify Image modifies the SDR bitmap.");
 
                 if (Image == null)
                 {
@@ -597,7 +597,7 @@ namespace ShareX
             if (Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.AddImageEffects))
             {
                 Image = TaskHelpers.ApplyImageEffects(Image, Info.TaskSettings.ImageSettingsReference);
-                ClearHDRData();
+                ClearHDRData("HDR capture data was discarded because image effects modify the SDR bitmap.");
 
                 if (Image == null)
                 {
@@ -609,7 +609,7 @@ namespace ShareX
             if (Info.TaskSettings.AfterCaptureJob.HasFlag(AfterCaptureTasks.AnnotateImage))
             {
                 Image = TaskHelpers.AnnotateImage(Image, null, Info.TaskSettings, true);
-                ClearHDRData();
+                ClearHDRData("HDR capture data was discarded because annotation modifies the SDR bitmap.");
 
                 if (Image == null)
                 {
@@ -642,6 +642,7 @@ namespace ShareX
                 EImageFormat selectedFormat = Info.TaskSettings.ImageSettings.ImageFormat;
                 bool strictHDROutput = TaskHelpers.IsStrictHDROutput(selectedFormat);
                 bool requiresHDRSource = TaskHelpers.RequiresHDRSource(selectedFormat, Info.TaskSettings);
+                bool useHDRJPEGGainMap = TaskHelpers.ShouldUseHDRJPEGGainMap(selectedFormat, Info.TaskSettings);
                 bool allowSDRFallback = Info.TaskSettings.ImageSettings.HDRAutoFallbackToSDR;
 
                 if (!ValidateHDRAvailability(requiresHDRSource, strictHDROutput, allowSDRFallback))
@@ -658,8 +659,14 @@ namespace ShareX
 
                     if (preparedImageData == null)
                     {
-                        AddErrorMessage(!string.IsNullOrWhiteSpace(hdrSaveError) ? hdrSaveError : GetHDRSaveFailureMessage(strictHDROutput, allowSDRFallback));
-                        return false;
+                        if (!(useHDRJPEGGainMap && allowSDRFallback))
+                        {
+                            AddErrorMessage(!string.IsNullOrWhiteSpace(hdrSaveError) ? hdrSaveError : GetHDRSaveFailureMessage(strictHDROutput, allowSDRFallback));
+                            return false;
+                        }
+
+                        DebugHelper.WriteLine("Ultra HDR JPEG save failed. Falling back to SDR JPEG. Reason: {0}",
+                            !string.IsNullOrWhiteSpace(hdrSaveError) ? hdrSaveError : "Unknown error.");
                     }
                 }
 
@@ -670,6 +677,7 @@ namespace ShareX
 
                 Data = preparedImageData.OpenReadStream();
                 Info.FileName = Path.ChangeExtension(Info.FileName, preparedImageData.ImageFormat.GetDescription());
+                ClearHDRData();
 
                 if (Info.IsUploadJob && Data == null)
                 {
@@ -761,12 +769,17 @@ namespace ShareX
             return true;
         }
 
-        private void ClearHDRData()
+        private void ClearHDRData(string errorMessage = null)
         {
             if (Info?.Metadata?.HDRData != null)
             {
                 Info.Metadata.HDRData.Dispose();
                 Info.Metadata.HDRData = null;
+            }
+
+            if (!string.IsNullOrWhiteSpace(errorMessage) && Info?.Metadata != null)
+            {
+                Info.Metadata.HDRErrorMessage = errorMessage;
             }
         }
 
@@ -778,7 +791,7 @@ namespace ShareX
                 return true;
             }
 
-            if (Info.Metadata.HDRCaptureStatus == HDRCaptureStatus.Unavailable || Info.Metadata.HDRCaptureStatus == HDRCaptureStatus.Failed)
+            if (Info.Metadata.HDRCaptureStatus != HDRCaptureStatus.Succeeded)
             {
                 AddErrorMessage(GetHDRUnavailableMessage(false, false));
                 return false;
@@ -789,7 +802,14 @@ namespace ShareX
 
         private bool ValidateHDRAvailability(bool requiresHDRSource, bool strictHDROutput, bool allowSDRFallback)
         {
-            if (Info.Metadata == null || !requiresHDRSource || Info.Metadata.HDRData != null)
+            if (Info.Metadata == null || Info.Metadata.HDRData != null)
+            {
+                return true;
+            }
+
+            bool lostCapturedHDRData = Info.Metadata.HDRCaptureStatus == HDRCaptureStatus.Succeeded && !allowSDRFallback;
+
+            if ((!requiresHDRSource && !lostCapturedHDRData) || (!strictHDROutput && allowSDRFallback && !requiresHDRSource))
             {
                 return true;
             }
@@ -808,6 +828,11 @@ namespace ShareX
             string message = !string.IsNullOrEmpty(Info.Metadata.HDRErrorMessage)
                 ? Info.Metadata.HDRErrorMessage
                 : "HDR capture data is not available.";
+
+            if (Info.Metadata.HDRCaptureStatus == HDRCaptureStatus.Succeeded && Info.Metadata.HDRData == null && string.IsNullOrEmpty(Info.Metadata.HDRErrorMessage))
+            {
+                message = "HDR capture data is no longer available because later image processing removed it.";
+            }
 
             if (strictHDROutput)
             {
@@ -1338,6 +1363,8 @@ namespace ShareX
 
         public void Dispose()
         {
+            ClearHDRData();
+
             if (Data != null)
             {
                 Data.Dispose();
